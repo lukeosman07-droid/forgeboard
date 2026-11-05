@@ -4,7 +4,8 @@ import { useState } from "react";
 import Logo from "./Logo";
 import { navLinks } from "@/lib/site";
 
-export default function Navbar() {
+// `auth` and `mobileAuth` are the server-rendered Log in / Get Started / Dashboard buttons.
+export default function Navbar({ auth, mobileAuth }: { auth: React.ReactNode; mobileAuth: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -23,12 +24,7 @@ export default function Navbar() {
               {link.label}
             </a>
           ))}
-          <a
-            href="#pricing"
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-orange-400"
-          >
-            Get Started
-          </a>
+          <div className="flex items-center gap-6">{auth}</div>
         </div>
 
         <button
@@ -45,27 +41,20 @@ export default function Navbar() {
         </button>
       </nav>
 
-      {open && (
-        <div id="mobile-menu" className="border-t border-white/10 px-4 pb-4 md:hidden">
-          {navLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              onClick={close}
-              className="block py-3 text-slate-300 hover:text-white"
-            >
-              {link.label}
-            </a>
-          ))}
+      {/* Kept mounted (just hidden) so the server-rendered buttons don't reload on each toggle. */}
+      <div id="mobile-menu" hidden={!open} className="border-t border-white/10 px-4 pb-4 md:hidden">
+        {navLinks.map((link) => (
           <a
-            href="#pricing"
+            key={link.href}
+            href={link.href}
             onClick={close}
-            className="mt-2 block rounded-lg bg-orange-500 px-4 py-2.5 text-center font-semibold text-slate-950 hover:bg-orange-400"
+            className="block py-3 text-slate-300 hover:text-white"
           >
-            Get Started
+            {link.label}
           </a>
-        </div>
-      )}
+        ))}
+        {mobileAuth}
+      </div>
     </header>
   );
 }

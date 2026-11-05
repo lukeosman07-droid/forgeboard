@@ -24,10 +24,10 @@ export default function Hero() {
           </p>
           <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
             <a
-              href="#pricing"
+              href="/signup"
               className="w-full rounded-lg bg-orange-500 px-6 py-3 text-center font-semibold text-slate-950 shadow-lg shadow-orange-500/20 transition hover:bg-orange-400 sm:w-auto"
             >
-              Start free
+              Start free trial
             </a>
             <a
               href="#how-it-works"
@@ -36,7 +36,7 @@ export default function Hero() {
               See how it works
             </a>
           </div>
-          <p className="mt-4 text-sm text-slate-500">Free plan available · No credit card required</p>
+          <p className="mt-4 text-sm text-slate-500">Free trial includes 3 AI extractions · No credit card required</p>
         </div>
 
         <DashboardMock />

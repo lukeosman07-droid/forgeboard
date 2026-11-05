@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { site } from "@/lib/site";
 
-export default function Logo() {
+export default function Logo({ href = "/" }: { href?: string }) {
   return (
-    <a href="#top" className="flex items-center gap-2 font-semibold text-white">
+    <Link href={href} className="flex items-center gap-2 font-semibold text-white">
       <span
         aria-hidden
         className="grid h-8 w-8 place-items-center rounded-lg bg-orange-500 text-slate-950"
@@ -15,6 +16,6 @@ export default function Logo() {
         </svg>
       </span>
       <span className="text-lg tracking-tight">{site.name}</span>
-    </a>
+    </Link>
   );
 }
