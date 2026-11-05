@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Section from "./Section";
 import Icon from "./Icon";
-import { FREE_TRIAL_EXTRACTIONS } from "@/lib/types";
+import { FREE_TRIAL_EXTRACTIONS } from "@/lib/plans";
 
 // Team and Business buttons start a free trial for now; Stripe checkout comes later.
 const plans = [

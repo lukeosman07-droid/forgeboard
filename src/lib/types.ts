@@ -31,6 +31,7 @@ export type Note = {
   project_id: string;
   owner_id: string;
   raw_text: string;
+  summary: string | null;
   created_at: string;
 };
 
@@ -48,6 +49,3 @@ export type Item = {
   status: ItemStatus;
   created_at: string;
 };
-
-// Free accounts get this many AI extractions to try the product.
-export const FREE_TRIAL_EXTRACTIONS = 3;
