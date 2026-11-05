@@ -142,7 +142,9 @@ async function main() {
     .single();
   if (noteError) fail("create the sample meeting note", noteError);
 
-  const base = { project_id: project.id, owner_id: user.id, note_id: note.id };
+  // status is set explicitly: in a multi-row insert, a column some rows omit
+  // is sent as null instead of using the database default.
+  const base = { project_id: project.id, owner_id: user.id, note_id: note.id, status: "open" };
   const items = [
     {
       type: "action_item",
