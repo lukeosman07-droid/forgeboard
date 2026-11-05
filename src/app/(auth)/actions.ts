@@ -3,10 +3,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MISSING_ENV_MESSAGE } from "@/lib/supabase/env";
+import { safeNext } from "@/lib/safe-next";
 
 export type AuthFormState = {
   error?: string;
   message?: string;
+  // Set on success when the user should continue somewhere specific (like checkout).
+  // The form does a full page load there, because it may be an API route.
+  redirectTo?: string;
   // Echo back what the user typed (never the password) so the form isn't wiped on error.
   values?: { email?: string; fullName?: string; companyName?: string };
 };
@@ -62,6 +66,8 @@ export async function login(_prev: AuthFormState, formData: FormData): Promise<A
   }
   if (error) return { error: friendlyError(error), values };
 
+  const next = safeNext(formData.get("next"));
+  if (next) return { redirectTo: next, values };
   redirect("/dashboard");
 }
 
@@ -110,6 +116,8 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
     return { message: "Check your inbox: we sent you a link to confirm your email.", values };
   }
 
+  const next = safeNext(formData.get("next"));
+  if (next) return { redirectTo: next, values };
   redirect("/dashboard");
 }
 

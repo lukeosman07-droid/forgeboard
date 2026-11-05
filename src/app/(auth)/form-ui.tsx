@@ -1,6 +1,10 @@
 "use client";
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 import { useFormStatus } from "react-dom";
+import { safeNext } from "@/lib/safe-next";
 
 // Small shared pieces for the login and signup forms.
 
@@ -69,4 +73,49 @@ export function FormAlert({ error, message }: { error?: string; message?: string
     );
   }
   return null;
+}
+
+// --- Continuing somewhere after login/sign-up (?next=...) ---
+
+/** The ?next= path from the URL, if it's a safe same-site path. */
+export function useNextPath() {
+  return safeNext(useSearchParams().get("next"));
+}
+
+/** Hidden field that sends ?next= along with the form. */
+export function NextField() {
+  const next = useNextPath();
+  return next ? <input type="hidden" name="next" value={next} /> : null;
+}
+
+/** After a successful login/sign-up with ?next=, do a full page load there (it may be an API route). */
+export function useFollowRedirect(redirectTo: string | undefined) {
+  useEffect(() => {
+    if (redirectTo) window.location.assign(redirectTo);
+  }, [redirectTo]);
+}
+
+/** "Log in" / "Create an account" link that keeps ?next= so checkout isn't lost. */
+export function AuthSwitchLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const next = useNextPath();
+  return (
+    <Link
+      href={next ? `${href}?next=${encodeURIComponent(next)}` : href}
+      className="font-medium text-orange-400 hover:text-orange-300"
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** Small note above the form when the visitor is on their way to buy a plan. */
+export function CheckoutHint() {
+  const next = useNextPath();
+  const plan = next?.match(/^\/api\/checkout\?plan=(team|business)$/)?.[1];
+  if (!plan) return null;
+  return (
+    <p className="mt-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm text-orange-200">
+      Next step: secure checkout for the {plan === "team" ? "Team" : "Business"} plan.
+    </p>
+  );
 }

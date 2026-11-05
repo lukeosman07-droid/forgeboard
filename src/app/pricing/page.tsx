@@ -4,6 +4,7 @@ import Navbar from "@/components/Navbar";
 import NavAuth, { NavAuthFallback } from "@/components/NavAuth";
 import Pricing from "@/components/Pricing";
 import Footer from "@/components/Footer";
+import CheckoutNotice from "./checkout-notice";
 
 export const metadata: Metadata = { title: "Pricing – Forgeboard" };
 
@@ -24,6 +25,10 @@ export default function PricingPage() {
         }
       />
       <main className="flex-1">
+        {/* Suspense because the notice reads the URL (?checkout=canceled) */}
+        <Suspense>
+          <CheckoutNotice />
+        </Suspense>
         <Pricing />
       </main>
       <Footer />

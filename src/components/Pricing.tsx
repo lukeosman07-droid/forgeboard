@@ -1,9 +1,11 @@
-import Link from "next/link";
 import Section from "./Section";
 import Icon from "./Icon";
 import { FREE_TRIAL_EXTRACTIONS } from "@/lib/plans";
+import { checkoutPath } from "@/lib/safe-next";
+import { site } from "@/lib/site";
 
-// Team and Business buttons start a free trial for now; Stripe checkout comes later.
+// Team and Business go to Stripe Checkout (via sign-up first if logged out).
+// Plain <a> tags, not <Link>, so checkout pages are never prefetched in the background.
 const plans = [
   {
     name: "Team",
@@ -17,8 +19,8 @@ const plans = [
       "Decision log, risks & action items",
       "Email support",
     ],
-    cta: "Start free trial",
-    href: "/signup",
+    cta: "Get Team",
+    href: checkoutPath("team"),
     featured: false,
   },
   {
@@ -33,8 +35,8 @@ const plans = [
       "File organization & attachments",
       "Priority support",
     ],
-    cta: "Start free trial",
-    href: "/signup",
+    cta: "Get Business",
+    href: checkoutPath("business"),
     featured: true,
   },
   {
@@ -49,8 +51,7 @@ const plans = [
       "Custom contract & invoicing",
     ],
     cta: "Contact us",
-    // TODO: point this at a real sales email or contact form.
-    href: "#about",
+    href: `mailto:${site.salesEmail}?subject=${encodeURIComponent("Forgeboard Enterprise")}`,
     featured: false,
   },
 ];
@@ -92,7 +93,7 @@ export default function Pricing() {
                 </li>
               ))}
             </ul>
-            <Link
+            <a
               href={plan.href}
               className={`mt-8 block w-full rounded-lg px-4 py-3 text-center font-semibold transition ${
                 plan.featured
@@ -101,7 +102,7 @@ export default function Pricing() {
               }`}
             >
               {plan.cta}
-            </Link>
+            </a>
           </div>
         ))}
       </div>

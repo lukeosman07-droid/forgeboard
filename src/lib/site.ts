@@ -5,6 +5,8 @@ export const site = {
   description:
     "Forgeboard gives engineering teams one organized hub for tasks, decisions, requirements, meeting notes, and files — with AI that turns messy notes into action items.",
   builder: "Luke Osman",
+  // Where the Enterprise "Contact us" button emails. TODO: change to your real sales address.
+  salesEmail: "sales@example.com",
   year: 2026,
 };
 
