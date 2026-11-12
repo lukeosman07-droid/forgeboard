@@ -13,14 +13,14 @@ export default function Hero() {
         <div className="text-center lg:text-left">
           <span className="inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1 text-xs font-medium text-orange-300">
             <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-            AI that turns meeting notes into action
+            Work management with AI built in
           </span>
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Every engineering project, <span className="text-orange-400">organized in one place.</span>
+            Plan, track and ship every project, <span className="text-orange-400">with AI doing the busywork.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg text-slate-400 lg:mx-0">
-            Forgeboard brings your team&apos;s tasks, decisions, requirements, notes, and files into one hub — and
-            its AI turns messy meeting notes into owned, dated action items automatically.
+            Forgeboard gives your team a table, board, calendar and timeline for every project. Its AI drafts
+            project plans, turns meeting notes into owned, dated tasks, and writes your status reports.
           </p>
           <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start">
             <a
@@ -36,7 +36,7 @@ export default function Hero() {
               See how it works
             </a>
           </div>
-          <p className="mt-4 text-sm text-slate-500">Free trial includes 3 AI extractions · No credit card required</p>
+          <p className="mt-4 text-sm text-slate-500">Free trial includes 3 AI runs · No credit card required</p>
         </div>
 
         <DashboardMock />

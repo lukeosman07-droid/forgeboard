@@ -10,6 +10,11 @@ const paths = {
   folder: "M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z",
   users: "M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.9M15.5 4.1a3 3 0 0 1 0 5.8",
   check: "M5 12.5l4.5 4.5L19 7.5",
+  board: "M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z",
+  calendar: "M3 5h18v16H3zM3 10h18M8 3v4M16 3v4",
+  timeline: "M4 6h9M8 12h11M4 18h7M4 3v18",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M20 20l-3.5-3.5",
 } as const;
 
 export type IconName = keyof typeof paths;

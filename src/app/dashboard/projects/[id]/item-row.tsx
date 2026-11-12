@@ -7,6 +7,7 @@ import type { Item, ItemType } from "@/lib/types";
 import ItemForm from "./item-form";
 
 const PRIORITY_STYLES = {
+  urgent: "border-red-600/40 bg-red-600/15 text-red-200",
   high: "border-red-500/30 bg-red-500/10 text-red-300",
   medium: "border-amber-500/30 bg-amber-500/10 text-amber-300",
   low: "border-slate-500/30 bg-slate-500/10 text-slate-300",

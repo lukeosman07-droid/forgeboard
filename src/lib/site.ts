@@ -3,7 +3,7 @@ export const site = {
   name: "Forgeboard",
   title: "Forgeboard – The organized workspace for engineering teams",
   description:
-    "Forgeboard gives engineering teams one organized hub for tasks, decisions, requirements, meeting notes, and files — with AI that turns messy notes into action items.",
+    "Forgeboard is work management for engineering teams: table, board, calendar and timeline views, with AI that plans projects, turns meeting notes into tasks, and writes status reports.",
   builder: "Luke Osman",
   // Where the Enterprise "Contact us" button emails. TODO: change to your real sales address.
   salesEmail: "sales@example.com",

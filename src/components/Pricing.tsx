@@ -15,8 +15,9 @@ const plans = [
     features: [
       "Up to 15 users",
       "Unlimited projects",
-      "AI meeting-notes extraction",
-      "Decision log, risks & action items",
+      "Table, board, calendar & timeline views",
+      "AI notes, project plans & status reports",
+      "Subtasks, updates & decision log",
       "Email support",
     ],
     cta: "Get Team",
@@ -32,7 +33,7 @@ const plans = [
       "Up to 50 users",
       "Everything in Team",
       "Priority AI processing",
-      "File organization & attachments",
+      "Templates & workload overview",
       "Priority support",
     ],
     cta: "Get Business",
@@ -62,7 +63,7 @@ export default function Pricing() {
       id="pricing"
       eyebrow="Pricing"
       title="Simple pricing that scales with your team"
-      intro={`One price per company, not per seat. Every new account starts with a free trial of ${FREE_TRIAL_EXTRACTIONS} AI extractions.`}
+      intro={`One price per company, not per seat. Every new account starts with a free trial with ${FREE_TRIAL_EXTRACTIONS} AI runs.`}
     >
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-3">
         {plans.map((plan) => (

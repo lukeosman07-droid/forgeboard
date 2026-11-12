@@ -1,253 +1,323 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useTransition } from "react";
-import { createItem, deleteProject } from "@/app/dashboard/actions";
-import { formatDate, useToday } from "@/lib/dates";
-import type { Item, ItemType, Note, Project } from "@/lib/types";
-import AiExtractPanel from "./ai-extract-panel";
-import ItemForm from "./item-form";
-import ItemRow from "./item-row";
+import { useMemo, useState, useTransition } from "react";
+import { deleteProject, updateProject } from "@/app/dashboard/actions";
+import TaskStore, { useTaskStore } from "@/components/work/task-store";
+import { Icon, MenuItem, Popover, type IconName } from "@/components/work/ui";
+import type { Item, Note, Project, Section, Task } from "@/lib/types";
+import { COLOR_NAMES, colorOf } from "@/lib/work";
+import BoardView from "./views/board-view";
+import CalendarView from "./views/calendar-view";
+import LogView from "./views/log-view";
+import NotesView from "./views/notes-view";
+import OverviewView from "./views/overview-view";
+import TableView from "./views/table-view";
+import TimelineView from "./views/timeline-view";
 
-type TabId = "actions" | "decisions" | "risks" | "notes";
-type StatusFilter = "all" | "open" | "done";
+import type { ViewId } from "./view-ids";
 
-const TABS: { id: TabId; label: string; types: ItemType[] }[] = [
-  { id: "actions", label: "Action Items", types: ["action_item"] },
-  { id: "decisions", label: "Decisions", types: ["decision"] },
-  { id: "risks", label: "Risks & Questions", types: ["risk", "question"] },
-  { id: "notes", label: "Notes", types: [] },
+export type { ViewId };
+
+const VIEWS: { id: ViewId; label: string; icon: IconName }[] = [
+  { id: "overview", label: "Overview", icon: "chart" },
+  { id: "table", label: "Table", icon: "table" },
+  { id: "board", label: "Board", icon: "board" },
+  { id: "calendar", label: "Calendar", icon: "calendar" },
+  { id: "timeline", label: "Timeline", icon: "timeline" },
+  { id: "log", label: "Decisions & Risks", icon: "log" },
+  { id: "notes", label: "AI Notes", icon: "sparkles" },
 ];
-
-const EMPTY_TEXT: Record<Exclude<TabId, "notes">, string> = {
-  actions: "No action items yet. Paste meeting notes above, or add one by hand.",
-  decisions: "No decisions logged yet. Record what the team agreed on so nobody has to dig through old emails.",
-  risks: "No risks or open questions yet. Track what could go wrong before it does.",
-};
 
 export type Usage = { paid: boolean; trialLeft: number };
 
-export default function ProjectWorkspace({
-  project,
-  items,
-  notes,
-  usage,
-}: {
+export type Filters = { search: string; owner: string; hideDone: boolean };
+
+export default function ProjectWorkspace(props: {
   project: Project;
-  items: Item[];
+  sections: Section[];
+  tasks: Task[];
+  logItems: Item[];
   notes: Note[];
   usage: Usage;
+  initialView: ViewId;
+  initialTaskId: string | null;
 }) {
-  const today = useToday();
-  const [tab, setTab] = useState<TabId>("actions");
-  const [filter, setFilter] = useState<StatusFilter>("open");
-  const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string>();
-  const [deleting, startDelete] = useTransition();
+  return (
+    <TaskStore tasks={props.tasks} initialOpenId={props.initialTaskId}>
+      <Workspace {...props} />
+    </TaskStore>
+  );
+}
 
-  const current = TABS.find((t) => t.id === tab)!;
-  const countFor = (t: (typeof TABS)[number]) =>
-    t.id === "notes"
-      ? notes.length
-      : items.filter((i) => t.types.includes(i.type) && (t.id === "decisions" || i.status === "open")).length;
+function Workspace({
+  project,
+  sections,
+  logItems,
+  notes,
+  usage,
+  initialView,
+}: Parameters<typeof ProjectWorkspace>[0]) {
+  const { tasks, add } = useTaskStore();
+  const [view, setView] = useState<ViewId>(initialView);
+  const [filters, setFilters] = useState<Filters>({ search: "", owner: "", hideDone: false });
 
-  const showFilter = tab === "actions" || tab === "risks";
-  const visible = items
-    .filter((i) => current.types.includes(i.type))
-    .filter((i) => !showFilter || filter === "all" || i.status === filter)
-    .sort(byStatusThenDueDate);
-
-  const overdueCount = items.filter(
-    (i) => i.type === "action_item" && i.status === "open" && i.due_date && today && i.due_date < today,
-  ).length;
-
-  const switchTab = (id: TabId) => {
-    setTab(id);
-    setAdding(false);
+  const switchView = (id: ViewId) => {
+    setView(id);
+    // Keep the view in the address bar so refresh and shared links land on it.
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", id);
+    url.searchParams.delete("task");
+    window.history.replaceState(null, "", url);
   };
 
-  const removeProject = () => {
-    if (!confirm(`Delete "${project.name}" and everything in it? This can't be undone.`)) return;
-    startDelete(async () => {
+  const owners = useMemo(
+    () => [...new Set(tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort((a, b) => a.localeCompare(b)),
+    [tasks],
+  );
+
+  const visible = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    return tasks.filter(
+      (t) =>
+        (!q || t.title.toLowerCase().includes(q) || t.assignee?.toLowerCase().includes(q)) &&
+        (!filters.owner || (filters.owner === "__none" ? !t.assignee : t.assignee === filters.owner)) &&
+        (!filters.hideDone || t.status !== "done"),
+    );
+  }, [tasks, filters]);
+
+  const filtering = !!(filters.search || filters.owner || filters.hideDone);
+  const showToolbar = view === "table" || view === "board" || view === "calendar" || view === "timeline";
+
+  return (
+    <div className="flex flex-col gap-5">
+      <ProjectHeader project={project} taskCount={tasks.length} />
+
+      <div className="-mx-4 overflow-x-auto px-4 sm:-mx-8 sm:px-8">
+        <div role="tablist" aria-label="Project views" className="flex min-w-max gap-1 border-b border-white/10">
+          {VIEWS.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="tab"
+              aria-selected={view === v.id}
+              onClick={() => switchView(v.id)}
+              className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+                view === v.id ? "border-orange-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Icon name={v.icon} />
+              {v.label}
+              {v.id === "log" && logItems.length > 0 && (
+                <span className="rounded-full bg-white/5 px-1.5 text-xs text-slate-400">{logItems.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {showToolbar && (
+        <div className="flex flex-wrap items-center gap-2">
+          <NewTaskButton onAdd={(title) => add(project.id, { title, section_id: sections[0]?.id ?? null })} />
+          <label className="relative">
+            <span className="sr-only">Search tasks</span>
+            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={filters.search}
+              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              placeholder="Search tasks"
+              className="w-44 rounded-lg border border-white/10 bg-slate-900/60 py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none sm:w-56"
+            />
+          </label>
+          <select
+            aria-label="Filter by owner"
+            value={filters.owner}
+            onChange={(e) => setFilters((f) => ({ ...f, owner: e.target.value }))}
+            className="rounded-lg border border-white/10 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 focus:border-orange-500/60 focus:outline-none [color-scheme:dark]"
+          >
+            <option value="">All owners</option>
+            {owners.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+            <option value="__none">Unassigned</option>
+          </select>
+          <button
+            type="button"
+            aria-pressed={filters.hideDone}
+            onClick={() => setFilters((f) => ({ ...f, hideDone: !f.hideDone }))}
+            className={`rounded-lg border px-3 py-1.5 text-sm ${
+              filters.hideDone ? "border-orange-500/50 bg-orange-500/10 text-orange-300" : "border-white/10 text-slate-300 hover:bg-white/5"
+            }`}
+          >
+            Hide done
+          </button>
+          {filtering && (
+            <button
+              type="button"
+              onClick={() => setFilters({ search: "", owner: "", hideDone: false })}
+              className="text-sm text-slate-400 hover:text-white"
+            >
+              Clear · {visible.length} of {tasks.length}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div role="tabpanel">
+        {view === "overview" && (
+          <OverviewView project={project} tasks={tasks} logItems={logItems} usage={usage} onOpenView={switchView} />
+        )}
+        {view === "table" && <TableView project={project} sections={sections} tasks={visible} filtering={filtering} />}
+        {view === "board" && <BoardView project={project} sections={sections} tasks={visible} />}
+        {view === "calendar" && <CalendarView project={project} sections={sections} tasks={visible} />}
+        {view === "timeline" && <TimelineView project={project} sections={sections} tasks={visible} />}
+        {view === "log" && <LogView projectId={project.id} items={logItems} />}
+        {view === "notes" && (
+          <NotesView projectId={project.id} usage={usage} notes={notes} items={[...tasks, ...logItems]} onSaved={() => switchView("table")} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProjectHeader({ project, taskCount }: { project: Project; taskCount: number }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string>();
+  const [name, setName] = useState(project.name);
+  const color = colorOf(project.color);
+
+  const save = (patch: Parameters<typeof updateProject>[1]) =>
+    startTransition(async () => {
+      const result = await updateProject(project.id, patch);
+      if (result.error) setError(result.error);
+    });
+
+  const remove = () => {
+    if (!confirm(`Delete "${project.name}" and all ${taskCount} tasks in it? This can't be undone.`)) return;
+    startTransition(async () => {
       const result = await deleteProject(project.id);
       if (result?.error) setError(result.error);
     });
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white">
-          ← All projects
-        </Link>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">{project.name}</h1>
-            {project.description && <p className="mt-1 max-w-3xl text-slate-400">{project.description}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={removeProject}
-            disabled={deleting}
-            className="self-start rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-red-500/10 hover:text-red-300"
-          >
-            {deleting ? "Deleting…" : "Delete project"}
-          </button>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-start gap-3">
+        <Popover
+          trigger={({ toggle }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label="Change project color"
+              className={`mt-1.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg ${color.dot} text-sm font-bold text-slate-950`}
+            >
+              {project.name.slice(0, 1).toUpperCase()}
+            </button>
+          )}
+        >
+          {(close) => (
+            <div className="grid grid-cols-4 gap-2 p-1">
+              {COLOR_NAMES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={c}
+                  onClick={() => {
+                    close();
+                    save({ color: c });
+                  }}
+                  className={`h-7 w-7 rounded-md ${colorOf(c).dot} ${c === project.color ? "ring-2 ring-white" : ""}`}
+                />
+              ))}
+            </div>
+          )}
+        </Popover>
+        <div className="min-w-0 flex-1">
+          <input
+            aria-label="Project name"
+            value={name}
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            onBlur={() => {
+              const n = name.trim();
+              if (n && n !== project.name) save({ name: n });
+              else setName(project.name);
+            }}
+            className="w-full truncate rounded-lg border border-transparent bg-transparent px-1 -mx-1 text-2xl font-bold tracking-tight text-white hover:border-white/10 focus:border-orange-500/60 focus:outline-none sm:text-3xl"
+          />
+          {project.description && <p className="mt-0.5 max-w-3xl text-sm text-slate-400">{project.description}</p>}
         </div>
-        {overdueCount > 0 && (
-          <p className="mt-4 inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm text-red-300">
-            ⚠ {overdueCount} overdue action item{overdueCount === 1 ? "" : "s"}
-          </p>
-        )}
+        <Popover
+          align="right"
+          trigger={({ toggle }) => (
+            <button type="button" onClick={toggle} aria-label="Project options" className="mt-1 rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white">
+              <Icon name="dots" className="h-5 w-5" />
+            </button>
+          )}
+        >
+          {(close) => (
+            <MenuItem
+              danger
+              onClick={() => {
+                close();
+                remove();
+              }}
+            >
+              <Icon name="trash" /> {pending ? "Deleting…" : "Delete project"}
+            </MenuItem>
+          )}
+        </Popover>
       </div>
-
-      <AiExtractPanel
-        projectId={project.id}
-        usage={usage}
-        startOpen={items.length === 0}
-        onSaved={() => switchTab("actions")}
-      />
-
       {error && (
-        <p role="alert" className="flex justify-between rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
-          <button type="button" onClick={() => setError(undefined)} aria-label="Dismiss" className="ml-3">
-            ✕
-          </button>
         </p>
       )}
-
-      <section>
-        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          <div role="tablist" aria-label="Project sections" className="flex min-w-max gap-1 border-b border-white/10">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === t.id}
-                onClick={() => switchTab(t.id)}
-                className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition ${
-                  tab === t.id
-                    ? "border-orange-500 text-white"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {t.label}
-                <span className="ml-2 rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-400">{countFor(t)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div role="tabpanel" className="mt-5">
-          {tab === "notes" ? (
-            <NotesList notes={notes} items={items} />
-          ) : (
-            <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                {showFilter ? (
-                  <div className="flex gap-1 rounded-lg border border-white/10 p-1" role="group" aria-label="Filter by status">
-                    {(["open", "done", "all"] as const).map((f) => (
-                      <button
-                        key={f}
-                        type="button"
-                        aria-pressed={filter === f}
-                        onClick={() => setFilter(f)}
-                        className={`rounded-md px-3 py-1 text-xs font-medium capitalize ${
-                          filter === f ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        {f === "done" ? (tab === "actions" ? "Done" : "Resolved") : f}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <span />
-                )}
-                {!adding && (
-                  <button
-                    type="button"
-                    onClick={() => setAdding(true)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/5"
-                  >
-                    + Add {tab === "actions" ? "action item" : tab === "decisions" ? "decision" : "risk or question"}
-                  </button>
-                )}
-              </div>
-
-              {adding && (
-                <div className="mb-4">
-                  <ItemForm
-                    types={current.types}
-                    submitLabel="Add"
-                    onCancel={() => setAdding(false)}
-                    onSubmit={async (input) => {
-                      const result = await createItem(project.id, input);
-                      if (!result.error) setAdding(false);
-                      return result;
-                    }}
-                  />
-                </div>
-              )}
-
-              {visible.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/15 px-6 py-10 text-center text-slate-400">
-                  {showFilter && filter !== "all" && items.some((i) => current.types.includes(i.type))
-                    ? `Nothing ${filter === "open" ? "open" : "completed"} here.`
-                    : EMPTY_TEXT[tab]}
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {visible.map((item) => (
-                    <ItemRow key={item.id} item={item} today={today} editTypes={current.types} onError={setError} />
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      </section>
     </div>
   );
 }
 
-// Open before done; earliest due date first; undated last.
-function byStatusThenDueDate(a: Item, b: Item) {
-  if (a.status !== b.status) return a.status === "open" ? -1 : 1;
-  if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
-  if (a.due_date) return -1;
-  if (b.due_date) return 1;
-  return a.created_at.localeCompare(b.created_at);
-}
-
-function NotesList({ notes, items }: { notes: Note[]; items: Item[] }) {
-  if (notes.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-white/15 px-6 py-10 text-center text-slate-400">
-        No notes yet. When you save an AI extraction, the original text is kept here for reference.
-      </div>
-    );
-  }
+function NewTaskButton({ onAdd }: { onAdd: (title: string) => void }) {
+  const [title, setTitle] = useState("");
   return (
-    <ul className="space-y-3">
-      {notes.map((note) => {
-        const count = items.filter((i) => i.note_id === note.id).length;
-        return (
-          <li key={note.id} className="rounded-xl border border-white/10 bg-slate-900/60 p-5">
-            <p className="text-xs text-slate-500">
-              {formatDate(note.created_at.slice(0, 10))} · {count} item{count === 1 ? "" : "s"} extracted
-            </p>
-            {note.summary && <p className="mt-2 text-slate-200">{note.summary}</p>}
-            <details className="mt-3">
-              <summary className="cursor-pointer text-sm text-orange-400 hover:text-orange-300">Show original text</summary>
-              <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-4 font-sans text-sm text-slate-300">
-                {note.raw_text}
-              </pre>
-            </details>
-          </li>
-        );
-      })}
-    </ul>
+    <Popover
+      trigger={({ toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-orange-400"
+        >
+          <Icon name="plus" /> New task
+        </button>
+      )}
+    >
+      {(close) => (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!title.trim()) return;
+            onAdd(title.trim());
+            setTitle("");
+            close();
+          }}
+          className="flex w-72 gap-2 p-1"
+        >
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Task name"
+            aria-label="New task name"
+            maxLength={500}
+            className="flex-1 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-sm text-white placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none"
+          />
+          <button type="submit" className="rounded-lg bg-orange-500 px-3 text-sm font-semibold text-slate-950 hover:bg-orange-400">
+            Add
+          </button>
+        </form>
+      )}
+    </Popover>
   );
 }

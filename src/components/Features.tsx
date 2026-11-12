@@ -4,34 +4,51 @@ import Icon, { type IconName } from "./Icon";
 const features: { icon: IconName; title: string; body: string; highlight?: boolean }[] = [
   {
     icon: "sparkles",
-    title: "AI notes → action items",
-    body: "Paste meeting notes, an email thread, or a spec. Forgeboard pulls out action items with owners and due dates, decisions, and open risks — and files them for you.",
+    title: "AI project plans",
+    body: "Describe a project in a few sentences. Forgeboard drafts the phases, tasks and a realistic schedule, ready to edit.",
     highlight: true,
   },
   {
-    icon: "hub",
-    title: "One project hub",
-    body: "Tasks, decisions, requirements, notes, and files for each project live together in a single organized workspace.",
+    icon: "list",
+    title: "AI notes → tasks",
+    body: "Paste meeting notes or an email thread. AI pulls out tasks with owners and due dates, decisions, risks and open questions.",
+    highlight: true,
+  },
+  {
+    icon: "chart",
+    title: "AI status reports",
+    body: "One click turns live task data into a stakeholder-ready update: health, highlights, concerns and next steps.",
+    highlight: true,
+  },
+  {
+    icon: "sheet",
+    title: "Table view",
+    body: "A spreadsheet that works for you: color-coded statuses, owners, priorities and dates, all editable in place.",
+  },
+  {
+    icon: "board",
+    title: "Board view",
+    body: "Drag cards across To do, Working on it, Stuck and Done, or group the board by section.",
+  },
+  {
+    icon: "calendar",
+    title: "Calendar view",
+    body: "See every deadline on a month grid, and drag tasks to a new day to reschedule them.",
+  },
+  {
+    icon: "timeline",
+    title: "Timeline view",
+    body: "A Gantt chart of your schedule. Drag bars to move work and stretch them to change durations.",
+  },
+  {
+    icon: "check",
+    title: "My work",
+    body: "Every task across every project in one list: overdue, today, this week and later.",
   },
   {
     icon: "gavel",
-    title: "Decision log",
-    body: "Every decision is recorded with who made it, when, and why — so nobody has to re-litigate it next month.",
-  },
-  {
-    icon: "list",
-    title: "Requirements tracking",
-    body: "Keep requirements and specs versioned and linked to the tasks and decisions that satisfy them.",
-  },
-  {
-    icon: "folder",
-    title: "File organization",
-    body: "Drawings, CAD exports, test data, and datasheets stay attached to the project — not lost in a shared drive.",
-  },
-  {
-    icon: "users",
-    title: "Team visibility",
-    body: "See who owns what and what's due this week across mechanical, electrical, civil, and manufacturing.",
+    title: "Decisions & risks",
+    body: "A searchable log of what was decided and why, plus open risks and questions, so nothing gets re-argued.",
   },
 ];
 
@@ -40,8 +57,8 @@ export default function Features() {
     <Section
       id="features"
       eyebrow="Features"
-      title="Everything your project needs, in one hub"
-      intro="Built for mechanical, electrical, civil, and manufacturing teams that need a single source of truth."
+      title="Everything your team needs to plan and deliver"
+      intro="Five ways to see every project, subtasks and updates on every task, and AI that handles the busywork."
     >
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {features.map((f) => (

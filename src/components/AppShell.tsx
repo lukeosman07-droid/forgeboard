@@ -1,47 +1,40 @@
-import Link from "next/link";
 import { Suspense } from "react";
-import Logo from "@/components/Logo";
+import CommandPalette from "@/components/app/command-palette";
+import SidebarFrame, { MainNav, MainNavLinks } from "@/components/app/sidebar";
+import SidebarProjects, { SidebarProjectsFallback } from "@/components/app/sidebar-projects";
+import UserCard from "@/components/app/user-card";
 import PlanBadge from "@/components/PlanBadge";
-import { logout } from "@/app/(auth)/actions";
-import { site } from "@/lib/site";
 
-// Frame for signed-in pages (dashboard, projects, billing, checkout success).
-// The frame itself is static so it shows instantly; the plan badge streams in.
+// Frame for signed-in pages: sidebar (navigation + projects), top bar with
+// search, and the page. The frame shows instantly; user data streams in.
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <>
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur">
-        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex items-center gap-6">
-            <Logo href="/dashboard" />
-            <Link href="/dashboard" className="hidden text-sm text-slate-300 hover:text-white sm:block">
-              Projects
-            </Link>
-            <Link href="/dashboard/billing" className="hidden text-sm text-slate-300 hover:text-white sm:block">
-              Billing
-            </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Suspense fallback={<span className="h-7 w-20 animate-pulse rounded-full bg-white/5" />}>
-              <PlanBadge />
-            </Suspense>
-            <form action={logout}>
-              <button
-                type="submit"
-                className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/5"
-              >
-                Log out
-              </button>
-            </form>
-          </div>
-        </nav>
-      </header>
-
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">{children}</main>
-
-      <footer className="border-t border-white/10 py-6 text-center text-sm text-slate-500">
-        © {site.year} {site.name} · Created by {site.builder}
-      </footer>
-    </>
+    <SidebarFrame
+      nav={
+        <Suspense fallback={<MainNavLinks pathname={null} />}>
+          <MainNav />
+        </Suspense>
+      }
+      projects={
+        <Suspense fallback={<SidebarProjectsFallback />}>
+          <SidebarProjects />
+        </Suspense>
+      }
+      footer={
+        <Suspense fallback={<div className="h-12 animate-pulse rounded-lg bg-white/5" />}>
+          <UserCard />
+        </Suspense>
+      }
+      topbar={
+        <>
+          <CommandPalette />
+          <Suspense fallback={<span className="h-7 w-20 animate-pulse rounded-full bg-white/5" />}>
+            <PlanBadge />
+          </Suspense>
+        </>
+      }
+    >
+      {children}
+    </SidebarFrame>
   );
 }

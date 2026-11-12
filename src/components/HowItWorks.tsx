@@ -2,16 +2,16 @@ import Section from "./Section";
 
 const steps = [
   {
-    title: "Create a project",
-    body: "Spin up a workspace for your build, design, or site project and invite your team in seconds.",
+    title: "Describe your project",
+    body: "Start blank, pick a template, or describe the work and let AI draft the phases, tasks and schedule.",
   },
   {
-    title: "Paste your notes",
-    body: "Drop in messy meeting notes, an email thread, or a spec document — no formatting needed.",
+    title: "Run it your way",
+    body: "Track work in a table, board, calendar or timeline. Paste meeting notes and AI turns them into tasks.",
   },
   {
-    title: "AI organizes everything",
-    body: "Action items, decisions, and open questions are extracted and filed into the right place automatically.",
+    title: "Report in one click",
+    body: "See progress, workload and overdue work at a glance, and let AI write the weekly status update.",
   },
 ];
 
@@ -20,7 +20,7 @@ export default function HowItWorks() {
     <Section
       id="how-it-works"
       eyebrow="How it works"
-      title="From messy notes to an organized project in three steps"
+      title="From idea to delivered project in three steps"
       className="border-y border-white/5 bg-slate-900/40"
     >
       <ol className="grid gap-6 md:grid-cols-3">
