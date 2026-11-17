@@ -76,6 +76,7 @@ test("a forgotten password can be reset from the emailed link", async ({ page })
 
   // The old password no longer works; the new one does.
   await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page).toHaveURL(/\/$/); // wait for the log-out to finish
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(FIRST_PASSWORD);
