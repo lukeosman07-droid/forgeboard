@@ -40,6 +40,8 @@ A safety net and the missing basics. How the product works for a signed-in user 
 
 **Code**
 
+- Next.js upgraded from 16.4.4 to 16.4.6 (Nov 17) because 16.4.4 has a published security advisory. `eslint-config-next` moved with it.
+
 - `src/lib/ai/client.ts` is now the only file that calls the Anthropic API (model IDs, structured output, error messages, token and latency log). `assist.ts` and `extract.ts` use it. The output clean-up moved to `src/lib/ai/clean.ts` so it can be unit tested.
 - README rewritten to match the product.
 
@@ -52,7 +54,6 @@ A safety net and the missing basics. How the product works for a signed-in user 
 - **Content-Security-Policy keeps `'unsafe-inline'` for scripts.** A nonce would remove it but forces every page to render per request, which undoes the static landing page. Revisit in Phase 6.
 - **AI token counts are logged, not stored.** The `ai_usage` table is Phase 2.
 - **The demo password was not rotated.** It is out of the repo going forward but is still in git history and in the class submission. Rotation is on the launch checklist.
-- **Next.js 16.4.4 has a published security advisory.** `next build` recommends upgrading (16.4.6 is current). Not done here because it wasn't in scope; it is a small, separate change.
 
 ### Manual steps for Luke
 
