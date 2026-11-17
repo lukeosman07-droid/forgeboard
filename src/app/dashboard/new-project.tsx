@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
-import type { PlanOutput } from "@/lib/ai/assist";
+import type { PlanOutput } from "@/lib/ai/assist-schema";
 import { Icon } from "@/components/work/ui";
 import { localToday } from "@/lib/dates";
 import { TEMPLATES } from "@/lib/templates";

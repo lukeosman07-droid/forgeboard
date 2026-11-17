@@ -71,6 +71,7 @@ const NAV: { href: string; label: string; icon: IconName; exact?: boolean }[] = 
   { href: "/dashboard", label: "Home", icon: "home", exact: true },
   { href: "/dashboard/my-work", label: "My work", icon: "check" },
   { href: "/dashboard/billing", label: "Billing", icon: "card" },
+  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
 // Reading the URL must happen inside <Suspense>; MainNavLinks is the fallback (no highlight).

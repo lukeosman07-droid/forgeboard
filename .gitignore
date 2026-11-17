@@ -46,3 +46,8 @@ next-env.d.ts
 .vscode/
 .idea/
 Thumbs.db
+
+# tests
+/test-results/
+/playwright-report/
+/blob-report/

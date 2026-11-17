@@ -5,8 +5,6 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-const DEMO_EMAIL = "demo@demo.com";
-const DEMO_PASSWORD = "password123!";
 const PROJECT_NAME = "Pump Station Retrofit";
 
 // Load .env.local (Node 20.12+). Values already set in the shell win.
@@ -14,6 +12,18 @@ try {
   process.loadEnvFile(".env.local");
 } catch {
   // No .env.local; fall back to variables already in the environment.
+}
+
+// The demo login comes from the environment, so its password is never in the repo.
+const DEMO_EMAIL = (process.env.DEMO_EMAIL ?? "demo@demo.com").toLowerCase();
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+
+if (!DEMO_PASSWORD || DEMO_PASSWORD.length < 10) {
+  console.error(
+    "\nMissing DEMO_PASSWORD (at least 10 characters).\n" +
+      "Add DEMO_PASSWORD=... to .env.local. It becomes the demo account's password.\n",
+  );
+  process.exit(1);
 }
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -115,7 +125,7 @@ async function main() {
     console.log(`  ✓ "${def.name}" created with ${count} items`);
   }
 
-  console.log(`\nDone! Log in at /login with ${DEMO_EMAIL} / ${DEMO_PASSWORD}\n`);
+  console.log(`\nDone! Log in at /login as ${DEMO_EMAIL} with the password in DEMO_PASSWORD.\n`);
 }
 
 // ---------------------------------------------------------------------------

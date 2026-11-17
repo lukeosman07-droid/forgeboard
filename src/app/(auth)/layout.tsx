@@ -1,7 +1,7 @@
 import Logo from "@/components/Logo";
 import { site } from "@/lib/site";
 
-// Shared frame for /login and /signup.
+// Shared frame for /login, /signup and the password reset pages.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-16">

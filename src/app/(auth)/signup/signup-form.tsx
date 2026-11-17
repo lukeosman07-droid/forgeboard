@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { MIN_PASSWORD_LENGTH } from "@/lib/account";
 import { signup, type AuthFormState } from "../actions";
 import { Field, FormAlert, NextField, SubmitButton, useFollowRedirect } from "../form-ui";
 
@@ -27,8 +28,8 @@ export default function SignupForm() {
         name="password"
         type="password"
         autoComplete="new-password"
-        minLength={8}
-        hint="At least 8 characters"
+        minLength={MIN_PASSWORD_LENGTH}
+        hint={`At least ${MIN_PASSWORD_LENGTH} characters`}
       />
       <SubmitButton pendingText={state.redirectTo ? "Continuing…" : "Creating account…"}>Create account</SubmitButton>
     </form>

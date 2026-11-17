@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { extractFromNotes, isEmptyExtraction } from "@/lib/ai/extract";
+import { isEmptyExtraction } from "@/lib/ai/clean";
+import { extractFromNotes } from "@/lib/ai/extract";
 import { aiError as fail, claimAiUse, safeToday } from "@/lib/ai/usage";
 import { MAX_NOTES_CHARS } from "@/lib/plans";
 

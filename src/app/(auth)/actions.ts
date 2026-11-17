@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MISSING_ENV_MESSAGE } from "@/lib/supabase/env";
+import { isDemoAccount, MIN_PASSWORD_LENGTH, passwordProblem, siteUrl } from "@/lib/account";
 import { safeNext } from "@/lib/safe-next";
 
 export type AuthFormState = {
@@ -26,7 +27,7 @@ function friendlyError(error: { code?: string; message?: string; status?: number
     case "email_exists":
       return "An account with this email already exists. Try logging in instead.";
     case "weak_password":
-      return "That password is too weak. Use at least 8 characters with a mix of letters and numbers.";
+      return `That password is too weak or has appeared in a data breach. Use at least ${MIN_PASSWORD_LENGTH} characters that you don't use anywhere else.`;
     case "email_address_invalid":
       return "That email address doesn't look right. Please check it.";
     case "over_request_rate_limit":
@@ -80,12 +81,11 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
 
   if (!fullName) return { error: "Please enter your name.", values };
   if (!email) return { error: "Please enter your email.", values };
-  if (password.length < 8) return { error: "Your password needs at least 8 characters.", values };
+  const problem = passwordProblem(password);
+  if (problem) return { error: problem, values };
 
   const supabase = await createClient();
   if (!supabase) return { error: MISSING_ENV_MESSAGE, values };
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   let result;
   try {
@@ -95,7 +95,7 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
       options: {
         // Only these two fields are copied into the profile by the database trigger.
         data: { full_name: fullName, company_name: companyName || null },
-        emailRedirectTo: `${siteUrl}/auth/callback`,
+        emailRedirectTo: `${siteUrl()}/auth/callback`,
       },
     });
   } catch {
@@ -119,6 +119,59 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
   const next = safeNext(formData.get("next"));
   if (next) return { redirectTo: next, values };
   redirect("/dashboard");
+}
+
+// Step 1 of a password reset: email a link. The answer is the same whether or
+// not the address has an account, so this can't be used to find out who has one.
+export async function requestPasswordReset(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
+  const email = field(formData, "email").toLowerCase();
+  const values = { email };
+  if (!email) return { error: "Enter the email you signed up with.", values };
+
+  const supabase = await createClient();
+  if (!supabase) return { error: MISSING_ENV_MESSAGE, values };
+
+  let error;
+  try {
+    ({ error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${siteUrl()}/auth/callback?next=/reset-password`,
+    }));
+  } catch {
+    return { error: "Couldn't reach the login service. Check your internet connection and try again.", values };
+  }
+  if (error && (error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit")) {
+    return { error: "Too many attempts. Please wait a minute and try again.", values };
+  }
+  if (error && error.status && error.status >= 500) return { error: friendlyError(error), values };
+
+  return { message: "If that email has an account, a reset link is on its way. It works for one hour.", values };
+}
+
+// Step 2: the emailed link signs the user in and lands on /reset-password,
+// where they choose the new password.
+export async function resetPassword(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
+  const password = String(formData.get("password") ?? "");
+  const problem = passwordProblem(password, String(formData.get("confirm") ?? ""));
+  if (problem) return { error: problem };
+
+  const supabase = await createClient();
+  if (!supabase) return { error: MISSING_ENV_MESSAGE };
+
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return { error: "This reset link has expired or was already used. Request a new one." };
+  if (isDemoAccount(data.user.email)) return { error: "The shared demo account's password can't be changed." };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    return {
+      error:
+        error.code === "same_password" ? "That's your current password. Choose a different one." : friendlyError(error),
+    };
+  }
+
+  // Sign out every other device, so a stolen session ends with the old password.
+  await supabase.auth.signOut({ scope: "others" });
+  redirect("/dashboard/settings?notice=password-updated");
 }
 
 export async function logout() {

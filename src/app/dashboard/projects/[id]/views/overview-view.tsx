@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { StatusReport } from "@/lib/ai/assist";
+import type { StatusReport } from "@/lib/ai/assist-schema";
 import { useTaskStore } from "@/components/work/task-store";
 import { Avatar, Icon, StatusPill, statusCounts } from "@/components/work/ui";
 import { formatDate, localToday, useToday } from "@/lib/dates";

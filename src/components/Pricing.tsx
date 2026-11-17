@@ -2,7 +2,6 @@ import Section from "./Section";
 import Icon from "./Icon";
 import { FREE_TRIAL_EXTRACTIONS } from "@/lib/plans";
 import { checkoutPath } from "@/lib/safe-next";
-import { site } from "@/lib/site";
 
 // Team and Business go to Stripe Checkout (via sign-up first if logged out).
 // Plain <a> tags, not <Link>, so checkout pages are never prefetched in the background.
@@ -52,7 +51,7 @@ const plans = [
       "Custom contract & invoicing",
     ],
     cta: "Contact us",
-    href: `mailto:${site.salesEmail}?subject=${encodeURIComponent("Forgeboard Enterprise")}`,
+    href: "/contact",
     featured: false,
   },
 ];
