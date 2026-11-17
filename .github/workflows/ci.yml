@@ -70,7 +70,9 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Database isolation tests
-        run: npm run test:db
+        run: |
+          npm run test:db -- --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/db-tests.json"
+          node -e 'const r=require(process.argv[1]);console.log("::notice title=Database tests::"+r.numPassedTests+" passed, "+r.numFailedTests+" failed, "+r.numPendingTests+" skipped")' "$RUNNER_TEMP/db-tests.json"
 
       - name: Seed the demo account
         run: npm run seed:demo
