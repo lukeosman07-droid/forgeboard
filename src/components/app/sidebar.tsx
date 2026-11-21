@@ -3,18 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import Logo from "@/components/Logo";
 import { Icon, type IconName } from "@/components/work/ui";
+import { useWorkspacePath } from "./workspace-context";
 
-// Layout for signed-in pages. On wide screens the sidebar is always visible;
-// on phones it slides in from the menu button.
+// Layout for pages inside a workspace. On wide screens the sidebar is always
+// visible; on phones it slides in from the menu button.
 export default function SidebarFrame({
+  switcher,
   nav,
   projects,
   footer,
   topbar,
   children,
 }: {
+  switcher: React.ReactNode;
   nav: React.ReactNode;
   projects: React.ReactNode;
   footer: React.ReactNode;
@@ -30,6 +32,9 @@ export default function SidebarFrame({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Close the mobile menu when any link in it is followed.
+  const closeOnLink = (e: React.MouseEvent) => (e.target as HTMLElement).closest("a") && setOpen(false);
+
   return (
     <div className="flex min-h-screen flex-1">
       {open && <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="fixed inset-0 z-40 bg-slate-950/60 lg:hidden" />}
@@ -38,17 +43,16 @@ export default function SidebarFrame({
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-14 items-center justify-between px-4">
-          <Logo href="/dashboard" />
+        <div className="flex h-14 items-center gap-1 px-3" onClick={closeOnLink}>
+          <div className="min-w-0 flex-1">{switcher}</div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 lg:hidden">
             <Icon name="x" />
           </button>
         </div>
-        {/* Close the mobile menu when any link in it is followed. */}
-        <nav aria-label="Main" className="space-y-0.5 px-3 pt-2" onClick={(e) => (e.target as HTMLElement).closest("a") && setOpen(false)}>
+        <nav aria-label="Main" className="space-y-0.5 px-3 pt-2" onClick={closeOnLink}>
           {nav}
         </nav>
-        <div className="mt-6 flex min-h-0 flex-1 flex-col px-3" onClick={(e) => (e.target as HTMLElement).closest("a") && setOpen(false)}>
+        <div className="mt-6 flex min-h-0 flex-1 flex-col px-3" onClick={closeOnLink}>
           {projects}
         </div>
         <div className="border-t border-white/10 p-3">{footer}</div>
@@ -67,11 +71,13 @@ export default function SidebarFrame({
   );
 }
 
-const NAV: { href: string; label: string; icon: IconName; exact?: boolean }[] = [
-  { href: "/dashboard", label: "Home", icon: "home", exact: true },
-  { href: "/dashboard/my-work", label: "My work", icon: "check" },
-  { href: "/dashboard/billing", label: "Billing", icon: "card" },
-  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
+// Paths are relative to the workspace: "" is /w/<slug>.
+const NAV: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
+  { path: "", label: "Home", icon: "home", exact: true },
+  { path: "/my-work", label: "My work", icon: "check" },
+  { path: "/members", label: "Members", icon: "users" },
+  { path: "/billing", label: "Billing", icon: "card" },
+  { path: "/settings", label: "Settings", icon: "settings" },
 ];
 
 // Reading the URL must happen inside <Suspense>; MainNavLinks is the fallback (no highlight).
@@ -80,16 +86,20 @@ export function MainNav() {
 }
 
 export function MainNavLinks({ pathname }: { pathname: string | null }) {
-  return NAV.map((item) => (
-    <NavLink
-      key={item.href}
-      href={item.href}
-      icon={<Icon name={item.icon} />}
-      active={!!pathname && (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`))}
-    >
-      {item.label}
-    </NavLink>
-  ));
+  const path = useWorkspacePath();
+  return NAV.map((item) => {
+    const href = path(item.path);
+    return (
+      <NavLink
+        key={item.label}
+        href={href}
+        icon={<Icon name={item.icon} />}
+        active={!!pathname && (item.exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`))}
+      >
+        {item.label}
+      </NavLink>
+    );
+  });
 }
 
 function NavLink({ href, icon, active, children }: { href: string; icon: React.ReactNode; active: boolean; children: React.ReactNode }) {

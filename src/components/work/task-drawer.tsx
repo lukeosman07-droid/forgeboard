@@ -2,19 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  addComment,
-  addSubtask,
-  deleteComment,
-  deleteSubtask,
-  getTaskDetail,
-  updateSubtask,
-  type TaskDetail,
-  type TaskPatch,
-} from "@/app/dashboard/actions";
+import { usePeople, useWorkspace, useWorkspacePath } from "@/components/app/workspace-context";
+import { displayName } from "@/lib/people";
+import { addComment, deleteComment } from "@/server/comments";
+import type { TaskPatch } from "@/server/schemas";
+import { addSubtask, deleteSubtask, getTaskDetail, updateSubtask, type TaskDetail } from "@/server/tasks";
 import { useToday } from "@/lib/dates";
 import type { ItemComment, Subtask, Task } from "@/lib/types";
 import { colorOf, isOverdue } from "@/lib/work";
+import AssigneePicker from "./assignee-picker";
 import { Avatar, DateField, Icon, PriorityPicker, ProgressBar, StatusPicker } from "./ui";
 
 // Right-side panel with everything about one task: fields, description,
@@ -33,6 +29,8 @@ export default function TaskDrawer({
   onDelete: () => void;
 }) {
   const today = useToday();
+  const path = useWorkspacePath();
+  const { canEdit, isAdmin, userId } = useWorkspace();
   const [detail, setDetail] = useState<TaskDetail | "missing" | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState<ItemComment[]>([]);
@@ -84,7 +82,7 @@ export default function TaskDrawer({
         <header className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
           {loaded ? (
             <Link
-              href={`/dashboard/projects/${loaded.project.id}`}
+              href={path(`/projects/${loaded.project.id}`)}
               className="flex min-w-0 items-center gap-2 text-sm text-slate-400 hover:text-white"
             >
               <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${colorOf(loaded.project.color).dot}`} />
@@ -94,7 +92,7 @@ export default function TaskDrawer({
             <span className="h-4 w-32 animate-pulse rounded bg-white/5" />
           )}
           <div className="flex items-center gap-1">
-            {task && (
+            {task && canEdit && (
               <button
                 type="button"
                 onClick={() => {
@@ -129,6 +127,9 @@ export default function TaskDrawer({
                 </p>
               )}
 
+              {/* Guests read and comment only: "disabled" reaches every control inside. */}
+              <fieldset disabled={!canEdit} className="m-0 min-w-0 space-y-6 border-0 p-0">
+              {!canEdit && <p className="text-xs text-slate-500">You&apos;re a guest here, so you can read this task and post updates.</p>}
               <button
                 type="button"
                 onClick={() => change({ status: task.status === "done" ? "open" : "done" })}
@@ -151,16 +152,8 @@ export default function TaskDrawer({
                 </dd>
 
                 <dt className="text-slate-400">Owner</dt>
-                <dd className="flex items-center gap-2">
-                  <Avatar name={task.assignee} />
-                  <BlurInput
-                    key={`a-${task.id}`}
-                    value={task.assignee ?? ""}
-                    placeholder="Add owner"
-                    ariaLabel="Owner"
-                    onSave={(assignee) => change({ assignee: assignee || null })}
-                    className="flex-1"
-                  />
+                <dd>
+                  <AssigneePicker assignee={task.assignee} assigneeId={task.assignee_id} onChange={(owner) => change(owner)} />
                 </dd>
 
                 <dt className="text-slate-400">Priority</dt>
@@ -229,8 +222,16 @@ export default function TaskDrawer({
                 loading={!loaded}
                 run={run}
               />
+              </fieldset>
 
-              <Updates comments={comments} setComments={setComments} taskId={task.id} loading={!loaded} run={run} />
+              <Updates
+                comments={comments}
+                setComments={setComments}
+                taskId={task.id}
+                loading={!loaded}
+                run={run}
+                canDelete={(c) => isAdmin || c.created_by === userId}
+              />
             </div>
           </div>
         )}
@@ -254,34 +255,6 @@ function TitleField({ value, onSave }: { value: string; onSave: (v: string) => v
         else setText(value);
       }}
       className="field-sizing-content w-full resize-none rounded-lg border border-transparent bg-transparent px-2 py-1 -mx-2 text-2xl font-bold text-white hover:border-white/10 focus:border-orange-500/60 focus:outline-none"
-    />
-  );
-}
-
-function BlurInput({
-  value,
-  onSave,
-  placeholder,
-  ariaLabel,
-  className = "",
-}: {
-  value: string;
-  onSave: (v: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  className?: string;
-}) {
-  const [text, setText] = useState(value);
-  return (
-    <input
-      aria-label={ariaLabel}
-      value={text}
-      placeholder={placeholder}
-      maxLength={200}
-      onChange={(e) => setText(e.target.value)}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      onBlur={() => text.trim() !== value && onSave(text.trim())}
-      className={`rounded-md border border-transparent bg-transparent px-1.5 py-1 text-sm text-slate-200 placeholder:text-slate-500 hover:border-white/10 focus:border-orange-500/60 focus:outline-none ${className}`}
     />
   );
 }
@@ -397,13 +370,17 @@ function Updates({
   taskId,
   loading,
   run,
+  canDelete,
 }: {
   comments: ItemComment[];
   setComments: React.Dispatch<React.SetStateAction<ItemComment[]>>;
   taskId: string;
   loading: boolean;
   run: (p: Promise<{ error?: string }>) => Promise<void>;
+  /** Your own updates, or any update if you're an admin (the database checks the same). */
+  canDelete: (comment: ItemComment) => boolean;
 }) {
+  const { byId } = usePeople();
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
 
@@ -453,24 +430,34 @@ function Updates({
         <p className="mt-3 text-sm text-slate-500">No updates yet. Post progress, questions or links here.</p>
       ) : (
         <ul className="mt-3 space-y-3">
-          {[...comments].reverse().map((c) => (
+          {[...comments].reverse().map((c) => {
+            const author = c.created_by ? byId.get(c.created_by) : undefined;
+            const name = author ? displayName(author) : "Former member";
+            return (
             <li key={c.id} className="group rounded-xl border border-white/5 bg-white/[0.03] p-3">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>{new Date(c.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComments((list) => list.filter((x) => x.id !== c.id));
-                    run(deleteComment(c.id));
-                  }}
-                  className="opacity-0 hover:text-red-300 group-hover:opacity-100 focus:opacity-100"
-                >
-                  Delete
-                </button>
+              <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Avatar name={name} />
+                  <span className="truncate font-medium text-slate-300">{name}</span>
+                  <span>{new Date(c.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                </span>
+                {canDelete(c) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComments((list) => list.filter((x) => x.id !== c.id));
+                      run(deleteComment(c.id));
+                    }}
+                    className="opacity-0 hover:text-red-300 group-hover:opacity-100 focus:opacity-100"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{c.body}</p>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </section>

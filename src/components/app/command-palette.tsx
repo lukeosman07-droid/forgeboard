@@ -2,22 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { searchWorkspace, type SearchResults } from "@/app/dashboard/actions";
+import { searchWorkspace, type SearchResults } from "@/server/search";
 import { Icon, StatusPill } from "@/components/work/ui";
 import { colorOf } from "@/lib/work";
+import { useWorkspace, useWorkspacePath } from "./workspace-context";
 
 // Ctrl/⌘ + K search across projects and tasks, plus quick navigation.
 
 type Result = { key: string; label: React.ReactNode; hint?: React.ReactNode; href: string };
 
-const PAGES: Result[] = [
-  { key: "home", label: "Home", href: "/dashboard" },
-  { key: "my-work", label: "My work", href: "/dashboard/my-work" },
-  { key: "billing", label: "Billing", href: "/dashboard/billing" },
+// Paths are relative to the workspace.
+const PAGES = [
+  { key: "home", label: "Home", path: "" },
+  { key: "my-work", label: "My work", path: "/my-work" },
+  { key: "members", label: "Members", path: "/members" },
+  { key: "billing", label: "Billing", path: "/billing" },
+  { key: "settings", label: "Settings", path: "/settings" },
 ];
 
 export default function CommandPalette() {
   const router = useRouter();
+  const { slug } = useWorkspace();
+  const path = useWorkspacePath();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults>({ projects: [], tasks: [] });
@@ -54,14 +60,14 @@ export default function CommandPalette() {
     // Small delay so we don't search on every keystroke.
     setTimeout(async () => {
       if (id !== requestId.current) return;
-      const data = await searchWorkspace(q).catch(() => null);
+      const data = await searchWorkspace(slug, q).catch(() => null);
       if (data && id === requestId.current) setResults(data);
     }, q ? 150 : 0);
   }
 
   const q = query.trim().toLowerCase();
   const items: Result[] = [
-    ...PAGES.filter((p) => !q || String(p.label).toLowerCase().includes(q)),
+    ...PAGES.filter((p) => !q || p.label.toLowerCase().includes(q)).map((p) => ({ key: p.key, label: p.label, href: path(p.path) })),
     ...results.projects.map((p) => ({
       key: `p-${p.id}`,
       label: (
@@ -71,7 +77,7 @@ export default function CommandPalette() {
         </span>
       ),
       hint: "Project",
-      href: `/dashboard/projects/${p.id}`,
+      href: path(`/projects/${p.id}`),
     })),
     ...results.tasks.map((t) => ({
       key: `t-${t.id}`,
@@ -82,7 +88,7 @@ export default function CommandPalette() {
           <StatusPill status={t.status} className="!py-0.5" />
         </span>
       ),
-      href: `/dashboard/projects/${t.project_id}?view=table&task=${t.id}`,
+      href: path(`/projects/${t.project_id}?view=table&task=${t.id}`),
     })),
   ];
 

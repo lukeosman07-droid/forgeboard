@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { colorOf } from "@/lib/work";
+import { useWorkspacePath } from "./workspace-context";
 
 export function ProjectLink({ id, name, color }: { id: string; name: string; color: string }) {
-  const href = `/dashboard/projects/${id}`;
+  const href = useWorkspacePath()(`/projects/${id}`);
   const active = usePathname() === href;
   return (
     <Link

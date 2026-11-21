@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
 
 // The signed-in user's plan, shown in the app header. Links to the Billing page.
-export default async function PlanBadge() {
+export default async function PlanBadge({ slug }: { slug: string }) {
   const user = await getCurrentUser();
   const supabase = user ? await createClient() : null;
   if (!user || !supabase) return null;
@@ -24,7 +24,7 @@ export default async function PlanBadge() {
 
   return (
     <Link
-      href="/dashboard/billing"
+      href={`/w/${slug}/billing`}
       title="Your plan: open Billing"
       className={`rounded-full border px-3 py-1 text-xs font-semibold whitespace-nowrap transition ${
         needsAttention

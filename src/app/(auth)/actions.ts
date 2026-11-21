@@ -87,6 +87,10 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
   const supabase = await createClient();
   if (!supabase) return { error: MISSING_ENV_MESSAGE, values };
 
+  // After confirming their email, continue where they were going (e.g. an invite).
+  const next = safeNext(formData.get("next"));
+  const callback = `${siteUrl()}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+
   let result;
   try {
     result = await supabase.auth.signUp({
@@ -95,7 +99,7 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
       options: {
         // Only these two fields are copied into the profile by the database trigger.
         data: { full_name: fullName, company_name: companyName || null },
-        emailRedirectTo: `${siteUrl()}/auth/callback`,
+        emailRedirectTo: callback,
       },
     });
   } catch {
@@ -116,7 +120,6 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
     return { message: "Check your inbox: we sent you a link to confirm your email.", values };
   }
 
-  const next = safeNext(formData.get("next"));
   if (next) return { redirectTo: next, values };
   redirect("/dashboard");
 }

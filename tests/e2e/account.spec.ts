@@ -71,7 +71,7 @@ test("a forgotten password can be reset from the emailed link", async ({ page })
   await page.getByLabel(/^New password/).fill(NEW_PASSWORD);
   await page.getByLabel("Repeat new password").fill(NEW_PASSWORD);
   await page.getByRole("button", { name: "Save new password" }).click();
-  await expect(page).toHaveURL(/\/dashboard\/settings\?notice=password-updated/);
+  await expect(page).toHaveURL(/\/w\/[a-z0-9-]+\/settings\?notice=password-updated/);
   await expect(page.getByText("Your password has been changed")).toBeVisible();
 
   // The old password no longer works; the new one does.
@@ -95,6 +95,7 @@ test("the reset form gives the same answer for an unknown email", async ({ page 
 test("the profile can be edited in settings", async ({ page }) => {
   await logIn(page, email, NEW_PASSWORD);
   await page.goto("/dashboard/settings");
+  await expect(page).toHaveURL(/\/w\/[a-z0-9-]+\/settings$/);
   await page.getByLabel("Full name").fill("Renamed Tester");
   await page.getByLabel("Company").fill("Test Engineering");
   await page.getByRole("button", { name: "Save profile" }).click();
@@ -122,7 +123,12 @@ test("changing the password needs the current one", async ({ page }) => {
 });
 
 test("an account can be deleted, taking its data with it", async ({ page }) => {
-  const { data: project } = await admin.from("projects").insert({ owner_id: userId, name: "Doomed project" }).select("id").single();
+  const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", userId).single();
+  const { data: project } = await admin
+    .from("projects")
+    .insert({ workspace_id: membership!.workspace_id, created_by: userId, name: "Doomed project" })
+    .select("id")
+    .single();
 
   await logIn(page, email, FIRST_PASSWORD);
   await page.goto("/dashboard/settings");
@@ -141,4 +147,6 @@ test("an account can be deleted, taking its data with it", async ({ page }) => {
   expect(user.user).toBeNull();
   const { data: left } = await admin.from("projects").select("id").eq("id", project!.id);
   expect(left).toHaveLength(0);
+  const { data: workspace } = await admin.from("workspaces").select("id").eq("id", membership!.workspace_id);
+  expect(workspace).toHaveLength(0);
 });

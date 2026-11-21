@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, use, useCallback, useOptimistic, useState, useTransition } from "react";
-import { createTask, deleteItem, updateTask, type TaskPatch } from "@/app/dashboard/actions";
+import type { TaskPatch } from "@/server/schemas";
+import { createTask, deleteItem, updateTask } from "@/server/tasks";
 import type { Task } from "@/lib/types";
 import TaskDrawer from "./task-drawer";
 
@@ -78,13 +79,15 @@ export default function TaskStore({
           task: {
             id: `temp-${now}`,
             project_id: projectId,
-            owner_id: "",
+            workspace_id: "",
+            created_by: null,
             note_id: null,
             section_id: input.section_id ?? null,
             type: "action_item",
             title: input.title,
             details: input.details ?? null,
             assignee: input.assignee ?? null,
+            assignee_id: input.assignee_id ?? null,
             start_date: input.start_date ?? null,
             due_date: input.due_date ?? null,
             priority: input.priority ?? null,

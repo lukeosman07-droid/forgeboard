@@ -4,7 +4,8 @@ import { getSupabaseEnv } from "./env";
 import { safeNext } from "@/lib/safe-next";
 
 // Pages that need a signed-in user, and pages a signed-in user should skip.
-const PROTECTED_PREFIXES = ["/dashboard", "/checkout"];
+// (/invite is left open: the page shows who invited you before asking you to log in.)
+const PROTECTED_PREFIXES = ["/dashboard", "/w", "/welcome", "/checkout"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 // Refreshes the Supabase session cookie on every request and handles auth redirects.

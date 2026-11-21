@@ -110,18 +110,34 @@ async function main() {
   if (profileError) fail("set up the demo profile", profileError);
   console.log("  ✓ Profile set to Business plan (active)");
 
-  // 3. Replace the sample projects so re-runs don't create duplicates.
+  // 3. The demo's workspace. Sign-up creates one for every account; this finds
+  //    the oldest workspace the demo user owns, and renames it to match.
+  const { data: owned, error: wsError } = await supabase
+    .from("workspace_members")
+    .select("workspace_id, workspaces(created_at)")
+    .eq("user_id", user.id)
+    .eq("role", "owner");
+  if (wsError) fail("find the demo workspace (has the workspaces migration been run?)", wsError);
+  const workspaceId = owned.sort((a, b) => a.workspaces.created_at.localeCompare(b.workspaces.created_at))[0]?.workspace_id;
+  if (!workspaceId) fail("find the demo workspace", new Error("the demo user owns no workspace"));
+  const { error: renameError } = await supabase.from("workspaces").update({ name: userMetadata.company_name }).eq("id", workspaceId);
+  if (renameError) fail("name the demo workspace", renameError);
+  console.log(`  ✓ Workspace "${userMetadata.company_name}" ready`);
+
+  // 4. Replace the sample projects so re-runs don't create duplicates.
   //    Deleting a project also deletes its sections, notes, items, subtasks and comments.
   const { error: deleteError } = await supabase
     .from("projects")
     .delete()
-    .eq("owner_id", user.id)
+    .eq("workspace_id", workspaceId)
     .in("name", PROJECTS.map((p) => p.name));
   if (deleteError) fail("clear the old sample projects", deleteError);
 
   // Oldest first, so the main project shows at the top of the sidebar.
+  // Owners stay plain names (the people in the notes aren't members), which
+  // shows the "map a name to a member" step in the owner picker.
   for (const def of [...PROJECTS].reverse()) {
-    const count = await createSampleProject(user.id, def);
+    const count = await createSampleProject(user.id, workspaceId, def);
     console.log(`  ✓ "${def.name}" created with ${count} items`);
   }
 
@@ -287,17 +303,19 @@ const PROJECTS = [
   },
 ];
 
-async function createSampleProject(ownerId, def) {
+// The service role has no auth.uid(), so created_by is set by hand here. The
+// workspace of sections, notes and items comes from their project (a trigger).
+async function createSampleProject(ownerId, workspaceId, def) {
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .insert({ owner_id: ownerId, name: def.name, description: def.description, color: def.color })
+    .insert({ workspace_id: workspaceId, created_by: ownerId, name: def.name, description: def.description, color: def.color })
     .select()
     .single();
   if (projectError) fail(`create the "${def.name}" project`, projectError);
 
   const { data: sections, error: sectionError } = await supabase
     .from("sections")
-    .insert(def.sections.map((s, i) => ({ project_id: project.id, owner_id: ownerId, name: s.name, position: i + 1 })))
+    .insert(def.sections.map((s, i) => ({ project_id: project.id, created_by: ownerId, name: s.name, position: i + 1 })))
     .select();
   if (sectionError) fail("create sections (has the work management migration been run?)", sectionError);
   const sectionId = new Map(sections.map((s) => [s.name, s.id]));
@@ -306,7 +324,7 @@ async function createSampleProject(ownerId, def) {
   if (def.note) {
     const { data: note, error } = await supabase
       .from("notes")
-      .insert({ project_id: project.id, owner_id: ownerId, raw_text: def.note, summary: def.noteSummary ?? null })
+      .insert({ project_id: project.id, created_by: ownerId, raw_text: def.note, summary: def.noteSummary ?? null })
       .select()
       .single();
     if (error) fail("create the sample meeting note", error);
@@ -319,7 +337,7 @@ async function createSampleProject(ownerId, def) {
   const taskRows = def.sections.flatMap((s) =>
     s.tasks.map((t) => ({
       project_id: project.id,
-      owner_id: ownerId,
+      created_by: ownerId,
       section_id: sectionId.get(s.name),
       note_id: noteId,
       type: "action_item",
@@ -337,7 +355,7 @@ async function createSampleProject(ownerId, def) {
   );
   const logRows = def.log.map((l) => ({
     project_id: project.id,
-    owner_id: ownerId,
+    created_by: ownerId,
     section_id: null,
     note_id: noteId,
     type: l.type,
@@ -361,14 +379,14 @@ async function createSampleProject(ownerId, def) {
 
   const allTasks = def.sections.flatMap((s) => s.tasks);
   const subtasks = allTasks.flatMap((t) =>
-    (t.subtasks ?? []).map(([title, done], i) => ({ item_id: itemId.get(t.title), owner_id: ownerId, title, done, position: i + 1 })),
+    (t.subtasks ?? []).map(([title, done], i) => ({ item_id: itemId.get(t.title), created_by: ownerId, title, done, position: i + 1 })),
   );
   if (subtasks.length) {
     const { error } = await supabase.from("subtasks").insert(subtasks);
     if (error) fail("create sample subtasks", error);
   }
   const comments = allTasks.flatMap((t) =>
-    (t.comments ?? []).map((body) => ({ item_id: itemId.get(t.title), owner_id: ownerId, body })),
+    (t.comments ?? []).map((body) => ({ item_id: itemId.get(t.title), created_by: ownerId, body })),
   );
   if (comments.length) {
     const { error } = await supabase.from("item_comments").insert(comments);

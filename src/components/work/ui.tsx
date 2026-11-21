@@ -348,7 +348,8 @@ export type IconName =
   | "chevron"
   | "logout"
   | "filter"
-  | "settings";
+  | "settings"
+  | "users";
 
 const ICONS: Record<IconName, React.ReactNode> = {
   home: <path d="M3 11l9-8 9 8M5 9.5V21h5v-6h4v6h5V9.5" />,
@@ -411,4 +412,5 @@ const ICONS: Record<IconName, React.ReactNode> = {
   logout: <path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" />,
   filter: <path d="M4 5h16l-6 7v6l-4 2v-8z" />,
   settings: <path d="M4 7h10M18 7h2M4 17h2M10 17h10M16 4.5v5M8 14.5v5" />,
+  users: <path d="M16 20v-1.5a4 4 0 0 0-4-4H6.5a4 4 0 0 0-4 4V20M9.25 10.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21.5 20v-1.5a4 4 0 0 0-3-3.87M15.5 3.63a3.5 3.5 0 0 1 0 6.75" />,
 };

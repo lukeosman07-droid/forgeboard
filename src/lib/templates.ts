@@ -1,4 +1,4 @@
-import type { ProjectPlan } from "@/app/dashboard/actions";
+import type { ProjectPlan } from "@/server/schemas";
 
 // Starter templates for new projects. Dates are offsets from the day the
 // project is created (start_offset) plus a length in days (duration_days).

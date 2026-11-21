@@ -14,5 +14,16 @@ export async function logIn(page: Page, email = demo.email, password = demo.pass
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
+  // /dashboard forwards to the workspace opened last: /w/<slug>.
+  await expect(page).toHaveURL(WORKSPACE_HOME);
+}
+
+/** A workspace home page, e.g. /w/demo-engineering-co */
+export const WORKSPACE_HOME = /\/w\/[a-z0-9-]+$/;
+
+/** The /w/<slug> prefix of the page the browser is on. */
+export function workspaceBase(page: Page) {
+  const match = new URL(page.url()).pathname.match(/^\/w\/[a-z0-9-]+/);
+  if (!match) throw new Error(`Not on a workspace page: ${page.url()}`);
+  return match[0];
 }

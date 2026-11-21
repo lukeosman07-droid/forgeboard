@@ -72,7 +72,10 @@ GitHub Actions (`.github/workflows/ci.yml`) does all of this on every pull reque
 - `src/app/(auth)/` – login, sign-up, forgot and reset password, and their server actions
 - `src/app/(legal)/` – terms, privacy, security, contact
 - `src/app/auth/` – landing routes for the links in Supabase emails
-- `src/app/dashboard/` – the signed-in app: home, My Work, projects, billing, settings
+- `src/app/w/[slug]/` – the signed-in app, one workspace per URL: home, My Work, projects, members, billing, settings
+- `src/app/dashboard/` – forwards old `/dashboard/...` links to the same page in the last-used workspace
+- `src/app/invite/[token]/` – the page an invite link opens
+- `src/server/` – server actions (projects, tasks, comments, members and invites) and their Zod schemas
 - `src/app/api/` – AI routes, Stripe checkout, billing portal and webhook
 - `src/components/` – landing page sections, the app frame (`app/`) and task UI (`work/`)
 - `src/lib/ai/` – `client.ts` is the only file that calls the Anthropic API; prompts and output clean-up sit beside it
