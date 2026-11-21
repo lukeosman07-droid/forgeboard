@@ -71,3 +71,14 @@ export async function defaultWorkspaceSlug(): Promise<string | null> {
   ]);
   return (workspaces.find((w) => w.id === profile?.last_workspace_id) ?? workspaces[0])?.slug ?? null;
 }
+
+/**
+ * A page in the user's default workspace, e.g. workspaceUrl("/settings").
+ * For redirect() in server actions: Next renders that redirect inside the
+ * action's response without passing through the proxy, so the proxy's
+ * /dashboard forwarding doesn't apply there.
+ */
+export async function workspaceUrl(path = ""): Promise<string> {
+  const slug = await defaultWorkspaceSlug();
+  return slug ? `/w/${slug}${path}` : "/welcome";
+}

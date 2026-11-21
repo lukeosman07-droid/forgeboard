@@ -5,11 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { MISSING_ENV_MESSAGE } from "@/lib/supabase/env";
 import { isDemoAccount, MIN_PASSWORD_LENGTH, passwordProblem, siteUrl } from "@/lib/account";
 import { safeNext } from "@/lib/safe-next";
+import { workspaceUrl } from "@/lib/workspaces";
 
 export type AuthFormState = {
   error?: string;
   message?: string;
-  // Set on success when the user should continue somewhere specific (like checkout).
+  // Set on success: where to continue (the app, or somewhere specific like checkout).
   // The form does a full page load there, because it may be an API route.
   redirectTo?: string;
   // Echo back what the user typed (never the password) so the form isn't wiped on error.
@@ -67,9 +68,8 @@ export async function login(_prev: AuthFormState, formData: FormData): Promise<A
   }
   if (error) return { error: friendlyError(error), values };
 
-  const next = safeNext(formData.get("next"));
-  if (next) return { redirectTo: next, values };
-  redirect("/dashboard");
+  // A full page load, so the proxy can forward /dashboard to the right workspace.
+  return { redirectTo: safeNext(formData.get("next")) ?? "/dashboard", values };
 }
 
 export async function signup(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
@@ -120,8 +120,7 @@ export async function signup(_prev: AuthFormState, formData: FormData): Promise<
     return { message: "Check your inbox: we sent you a link to confirm your email.", values };
   }
 
-  if (next) return { redirectTo: next, values };
-  redirect("/dashboard");
+  return { redirectTo: next ?? "/dashboard", values };
 }
 
 // Step 1 of a password reset: email a link. The answer is the same whether or
@@ -174,7 +173,7 @@ export async function resetPassword(_prev: AuthFormState, formData: FormData): P
 
   // Sign out every other device, so a stolen session ends with the old password.
   await supabase.auth.signOut({ scope: "others" });
-  redirect("/dashboard/settings?notice=password-updated");
+  redirect(await workspaceUrl("/settings?notice=password-updated"));
 }
 
 export async function logout() {

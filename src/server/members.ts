@@ -5,6 +5,7 @@ import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { siteUrl } from "@/lib/account";
 import { sendInviteEmail } from "@/lib/email";
+import { workspaceUrl } from "@/lib/workspaces";
 import { ROLE_LABELS, displayName } from "@/lib/people";
 import type { Role } from "@/lib/types";
 import { Email, Id, InviteRole, InviteToken, WorkspaceName, firstIssue, type ActionResult } from "./schemas";
@@ -243,7 +244,7 @@ export async function leaveWorkspace(slug: string): Promise<ActionResult> {
 
   const { error } = await supabase.rpc("remove_member", { p_workspace: workspace.id, p_user: user.id });
   if (error) return { error: rpcMessage(error, "Couldn't leave the workspace.") };
-  redirect("/dashboard");
+  redirect(await workspaceUrl());
 }
 
 export async function transferOwnership(slug: string, userId: string): Promise<ActionResult> {

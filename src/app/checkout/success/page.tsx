@@ -7,6 +7,7 @@ import { PLAN_LABELS, hasPaidAccess } from "@/lib/plans";
 import { getStripe, isPaidPlan } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
+import { workspaceUrl } from "@/lib/workspaces";
 import WaitForWebhook from "./wait-for-webhook";
 
 export const metadata: Metadata = { title: "Welcome aboard – Forgeboard" };
@@ -28,11 +29,11 @@ async function SuccessContent({ searchParams }: { searchParams: PageProps<"/chec
 
   const stripe = getStripe();
   const sessionId = typeof session_id === "string" ? session_id : null;
-  if (!stripe || !sessionId) redirect("/dashboard/billing");
+  if (!stripe || !sessionId) redirect(await workspaceUrl("/billing"));
 
   // Which plan did they buy? Read from Stripe, and make sure the session is theirs.
   const session = await stripe.checkout.sessions.retrieve(sessionId).catch(() => null);
-  if (!session || session.client_reference_id !== user.id) redirect("/dashboard/billing");
+  if (!session || session.client_reference_id !== user.id) redirect(await workspaceUrl("/billing"));
   const plan = isPaidPlan(session.metadata?.plan) ? session.metadata.plan : null;
 
   const supabase = await createClient();
