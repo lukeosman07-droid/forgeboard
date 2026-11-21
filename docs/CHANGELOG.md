@@ -37,8 +37,8 @@ Forgeboard is now multi-user. Work belongs to a workspace (a firm or team), not 
 
 ### Skipped or deferred
 
-- **Not run locally: database and browser tests.** They need Docker. The migration was checked in an in-memory Postgres (PGlite) with about 90 checks, all passing. Lint, typecheck, 35 unit tests and the build pass. The DB and browser suites will run for the first time in CI.
-- **Not clicked through in a browser.** The local app uses the hosted database, which doesn't have this migration yet.
+- **Tests ran in CI, not locally** (they need Docker). On the `phase-1` branch all pass: 75 database tests, 28 browser tests, 35 unit tests, lint, typecheck and build. CI now also runs on pushes to `phase-*` branches, so a phase is tested before a pull request exists.
+- **Not clicked through by hand.** The local app uses the hosted database, which doesn't have this migration yet. The browser tests cover the main flows against a local database in CI.
 - **Signing up from an invite still creates a personal workspace** for the new person, next to the one they joined. Harmless, but could be skipped later.
 - **Avatars and time zone** have columns but no settings UI yet.
 - **Billing per workspace** (moving Stripe off the profile) is Phase 2.
