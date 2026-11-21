@@ -1,11 +1,12 @@
 name: CI
 
-# Runs on every pull request and on main. To block merging when it fails, turn on
-# branch protection for main and require both jobs (see docs/CHANGELOG.md).
+# Runs on every pull request, on main, and on phase-* work branches (so a phase
+# is tested before a pull request exists). To block merging when it fails, turn
+# on branch protection for main and require both jobs (see docs/CHANGELOG.md).
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "phase-*"]
 
 concurrency:
   group: ci-${{ github.ref }}
