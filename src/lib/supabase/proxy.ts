@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseEnv } from "./env";
 import { safeNext } from "@/lib/safe-next";
@@ -48,6 +49,24 @@ export async function updateSession(request: NextRequest) {
     // Come back to the page they asked for after logging in.
     return redirectTo("/login", pathname + request.nextUrl.search);
   }
+  // The app used to live at /dashboard; it now lives at /w/<workspace>. Old links
+  // (bookmarks, emails, Stripe return URLs, the redirect after login) open the
+  // same page in the workspace used last. Done here rather than in a route so it
+  // also works for in-app navigations.
+  if (isSignedIn && (pathname === "/dashboard" || pathname.startsWith("/dashboard/"))) {
+    const slug = await lastWorkspaceSlug(supabase, String(data!.claims.sub));
+    const url = request.nextUrl.clone();
+    if (slug) {
+      url.pathname = `/w/${slug}${pathname.slice("/dashboard".length)}`;
+    } else {
+      url.pathname = "/welcome";
+      url.search = "";
+    }
+    const redirect = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  }
+
   if (isSignedIn && AUTH_PAGES.includes(pathname)) {
     // Already logged in: skip the form and continue (e.g. on to checkout).
     const next = safeNext(request.nextUrl.searchParams.get("next"));
@@ -60,4 +79,18 @@ export async function updateSession(request: NextRequest) {
   }
 
   return response;
+}
+
+/** The workspace the user opened last, else their oldest one, else null. */
+async function lastWorkspaceSlug(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  const [{ data: profile }, { data: memberships }] = await Promise.all([
+    supabase.from("profiles").select("last_workspace_id").eq("id", userId).maybeSingle<{ last_workspace_id: string | null }>(),
+    supabase
+      .from("workspace_members")
+      .select("workspace_id, workspaces(slug, created_at)")
+      .eq("user_id", userId)
+      .overrideTypes<{ workspace_id: string; workspaces: { slug: string; created_at: string } | null }[], { merge: false }>(),
+  ]);
+  const list = (memberships ?? []).filter((m) => m.workspaces).sort((a, b) => a.workspaces!.created_at.localeCompare(b.workspaces!.created_at));
+  return (list.find((m) => m.workspace_id === profile?.last_workspace_id) ?? list[0])?.workspaces?.slug ?? null;
 }

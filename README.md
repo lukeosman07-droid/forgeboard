@@ -73,7 +73,7 @@ GitHub Actions (`.github/workflows/ci.yml`) does all of this on every pull reque
 - `src/app/(legal)/` – terms, privacy, security, contact
 - `src/app/auth/` – landing routes for the links in Supabase emails
 - `src/app/w/[slug]/` – the signed-in app, one workspace per URL: home, My Work, projects, members, billing, settings
-- `src/app/dashboard/` – forwards old `/dashboard/...` links to the same page in the last-used workspace
+- `src/lib/supabase/proxy.ts` – session refresh, login redirects, and forwarding old `/dashboard/...` links to the same page in the last-used workspace
 - `src/app/invite/[token]/` – the page an invite link opens
 - `src/server/` – server actions (projects, tasks, comments, members and invites) and their Zod schemas
 - `src/app/api/` – AI routes, Stripe checkout, billing portal and webhook
