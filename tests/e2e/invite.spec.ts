@@ -76,7 +76,7 @@ test("an owner invites a member, who accepts and sees the projects", async ({ pa
   await page.getByRole("button", { name: "Send invites" }).click();
   const link = await page.getByLabel("Invite link").inputValue();
   expect(link).toMatch(/\/invite\/[A-Za-z0-9_-]{40,}$/);
-  await expect(page.getByText(people.b.email)).toBeVisible(); // listed under pending invites
+  await expect(page.locator("section", { hasText: "Pending invites" }).getByText(people.b.email)).toBeVisible();
   await logOut(page);
 
   await accept(page, link, people.b.email);
