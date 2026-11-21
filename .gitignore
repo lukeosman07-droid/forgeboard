@@ -51,3 +51,6 @@ Thumbs.db
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Local database backups (customer data: never commit)
+/backups/
