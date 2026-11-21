@@ -6,13 +6,28 @@ import { useWorkspace } from "@/components/app/workspace-context";
 import { Avatar, Icon } from "@/components/work/ui";
 import { displayName } from "@/lib/people";
 import { addProjectMember, removeProjectMember, shareProjectByEmail, type InviteOutcome } from "@/server/members";
+import { setProjectManager } from "@/server/projects";
 
 // "Share" on the project header. Members already see every project, so this is
 // about guests: people outside the firm (a client's PM, a contractor) who can
 // read and comment on this one project and don't use a seat.
-export default function ShareDialog({ projectId, projectName, sharedWith }: { projectId: string; projectName: string; sharedWith: string[] }) {
+// Only the project's PM and the workspace's admins can bring guests in; admins
+// also choose the PM. The database enforces both.
+export default function ShareDialog({
+  projectId,
+  projectName,
+  sharedWith,
+  managerId,
+}: {
+  projectId: string;
+  projectName: string;
+  sharedWith: string[];
+  managerId: string | null;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const { people, canEdit, name: workspaceName } = useWorkspace();
+  const { people, isAdmin, userId, name: workspaceName } = useWorkspace();
+  const canManage = isAdmin || (managerId !== null && managerId === userId);
+  const manager = people.find((p) => p.user_id === managerId && p.role !== "guest");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -75,7 +90,32 @@ export default function ShareDialog({ projectId, projectName, sharedWith }: { pr
         </div>
 
         <div className="space-y-5 overflow-y-auto p-6">
-          {canEdit && (
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Project manager</h3>
+            {isAdmin ? (
+              <select
+                value={manager?.user_id ?? ""}
+                disabled={pending}
+                aria-label="Project manager"
+                onChange={(e) => run(() => setProjectManager(projectId, e.target.value || null), () => setNotice("Project manager updated."))}
+                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-200"
+              >
+                <option value="">No PM (admins only)</option>
+                {members.map((p) => (
+                  <option key={p.user_id} value={p.user_id}>
+                    {displayName(p)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="mt-2 text-sm text-slate-300">{manager ? displayName(manager) : "None yet (admins manage sharing)"}</p>
+            )}
+            {!canManage && (
+              <p className="mt-2 text-xs text-slate-500">Only the project manager or an admin can invite guests to this project.</p>
+            )}
+          </section>
+
+          {canManage && (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -127,7 +167,7 @@ export default function ShareDialog({ projectId, projectName, sharedWith }: { pr
                       <span className="block truncate text-slate-200">{displayName(p)}</span>
                       <span className="block truncate text-xs text-slate-500">{p.email}</span>
                     </span>
-                    {canEdit && (
+                    {canManage && (
                       <button
                         type="button"
                         disabled={pending}
@@ -143,7 +183,7 @@ export default function ShareDialog({ projectId, projectName, sharedWith }: { pr
             )}
           </section>
 
-          {canEdit && otherGuests.length > 0 && (
+          {canManage && otherGuests.length > 0 && (
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Other guests in {workspaceName}</h3>
               <ul className="mt-2 space-y-1">

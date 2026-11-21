@@ -257,7 +257,7 @@ function ProjectHeader({ project, taskCount, sharedWith }: { project: Project; t
           />
           {project.description && <p className="mt-0.5 max-w-3xl text-sm text-slate-400">{project.description}</p>}
         </div>
-        <ShareDialog projectId={project.id} projectName={project.name} sharedWith={sharedWith} />
+        <ShareDialog projectId={project.id} projectName={project.name} sharedWith={sharedWith} managerId={project.manager_id} />
         {canEdit && <Popover
           align="right"
           trigger={({ toggle }) => (

@@ -219,6 +219,13 @@ $$;
 alter table public.items add column assignee_id uuid references auth.users (id) on delete set null;
 create index items_assignee_id_idx on public.items (assignee_id);
 
+-- The project's PM. With the workspace's admins, the only person who may bring
+-- guests (clients, contractors) into the project. Starts as whoever created it;
+-- admins can reassign it. Existing projects go to their creator (the owner).
+alter table public.projects add column manager_id uuid references auth.users (id) on delete set null;
+update public.projects set manager_id = created_by;
+create index projects_manager_id_idx on public.projects (manager_id);
+
 -- ===========================================================================
 -- 3. Authorization helpers
 --    security definer: they read the membership tables directly, so policies
@@ -304,6 +311,23 @@ as $$
   select exists (select 1 from public.projects pr where pr.id = p and public.can_write_workspace(pr.workspace_id));
 $$;
 
+-- The project's PM or a workspace admin: may decide who outside the firm
+-- (guests) can see the project.
+create function public.can_manage_project(p uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.projects pr
+    where pr.id = p
+      and (public.is_workspace_admin(pr.workspace_id)
+           or (pr.manager_id = (select auth.uid()) and public.can_write_workspace(pr.workspace_id)))
+  );
+$$;
+
 create function public.can_read_item(i uuid)
 returns boolean
 language sql
@@ -376,14 +400,42 @@ begin
 end;
 $$;
 
+-- Also guards the PM (manager_id): a new project's PM is its creator unless an
+-- admin names someone else, only admins can reassign it, and the PM must be a
+-- member of the workspace (not a guest). Service-role scripts are trusted.
 create function public.project_before_write()
 returns trigger
 language plpgsql
+security definer
 set search_path = ''
 as $$
+declare
+  v_user uuid := (select auth.uid());
 begin
   if tg_op = 'UPDATE' then
     new.workspace_id := old.workspace_id; -- a project never moves between workspaces
+  end if;
+
+  if tg_op = 'UPDATE' and new.manager_id is not distinct from old.manager_id then
+    return new; -- PM unchanged: nothing to check
+  end if;
+
+  -- set by remove_member/set_member_role (this transaction only) when they
+  -- clear the PM of someone leaving or becoming a guest.
+  if v_user is not null and coalesce(current_setting('forgeboard.trusted', true), '') <> 'on' then
+    if tg_op = 'INSERT' and new.manager_id is null then
+      new.manager_id := v_user;
+    elsif not public.is_workspace_admin(new.workspace_id)
+          and (tg_op = 'UPDATE' or new.manager_id <> v_user) then
+      raise exception 'not_allowed' using errcode = '42501';
+    end if;
+  end if;
+
+  if new.manager_id is not null and not exists (
+    select 1 from public.workspace_members m
+    where m.workspace_id = new.workspace_id and m.user_id = new.manager_id and m.role <> 'guest'
+  ) then
+    raise exception 'invalid_manager' using errcode = '23514';
   end if;
   return new;
 end;
@@ -633,11 +685,12 @@ create policy "Anyone who can see the project can see who it is shared with"
   on public.project_members for select to authenticated
   using (public.can_read_project(project_id));
 
--- Only someone already in the workspace can be added to one of its projects.
-create policy "Members can share a project with workspace people"
+-- Only the project's PM or an admin decides who outside the firm sees a
+-- project, and only someone already in the workspace can be added.
+create policy "The PM and admins can share a project with workspace people"
   on public.project_members for insert to authenticated
   with check (
-    public.can_write_project(project_id)
+    public.can_manage_project(project_id)
     and exists (
       select 1 from public.projects pr
       join public.workspace_members m on m.workspace_id = pr.workspace_id
@@ -645,9 +698,9 @@ create policy "Members can share a project with workspace people"
     )
   );
 
-create policy "Members can unshare; anyone can remove themselves"
+create policy "The PM and admins can unshare; anyone can remove themselves"
   on public.project_members for delete to authenticated
-  using (public.can_write_project(project_id) or user_id = (select auth.uid()));
+  using (public.can_manage_project(project_id) or user_id = (select auth.uid()));
 
 revoke all on public.project_members from anon, authenticated;
 grant select, insert, delete on public.project_members to authenticated;
@@ -727,7 +780,8 @@ begin
   end if;
 
   if p_project is not null then
-    if p_role <> 'guest' or not public.can_write_project(p_project)
+    -- A project invite is a guest invite, from that project's PM or an admin.
+    if p_role <> 'guest' or not public.can_manage_project(p_project)
        or not exists (select 1 from public.projects pr where pr.id = p_project and pr.workspace_id = p_workspace) then
       raise exception 'not_allowed' using errcode = '42501';
     end if;
@@ -894,6 +948,13 @@ begin
   end if;
 
   update public.workspace_members m set role = p_role where m.workspace_id = p_workspace and m.user_id = p_user;
+
+  -- A guest can't be a PM: their projects fall back to the admins.
+  if p_role = 'guest' then
+    perform set_config('forgeboard.trusted', 'on', true);
+    update public.projects pr set manager_id = null where pr.workspace_id = p_workspace and pr.manager_id = p_user;
+    perform set_config('forgeboard.trusted', '', true);
+  end if;
 end;
 $$;
 
@@ -932,6 +993,11 @@ begin
   delete from public.project_members pm
   using public.projects pr
   where pr.id = pm.project_id and pr.workspace_id = p_workspace and pm.user_id = p_user;
+
+  -- Projects they were PM of fall back to the admins until someone is named.
+  perform set_config('forgeboard.trusted', 'on', true);
+  update public.projects pr set manager_id = null where pr.workspace_id = p_workspace and pr.manager_id = p_user;
+  perform set_config('forgeboard.trusted', '', true);
 
   delete from public.workspace_members m where m.workspace_id = p_workspace and m.user_id = p_user;
   update public.profiles p set last_workspace_id = null where p.id = p_user and p.last_workspace_id = p_workspace;
@@ -1059,7 +1125,11 @@ begin
   delete from public.workspaces w
   where exists (select 1 from public.workspace_members m where m.workspace_id = w.id and m.user_id = v_user_id and m.role = 'owner');
 
+  -- Deleting the user clears them as PM (on delete set null), which the
+  -- projects trigger would otherwise refuse for a non-admin.
+  perform set_config('forgeboard.trusted', 'on', true);
   delete from auth.users where id = v_user_id;
+  perform set_config('forgeboard.trusted', '', true);
 end;
 $$;
 
@@ -1088,6 +1158,7 @@ revoke execute on function
   public.can_write_project(uuid),
   public.can_read_item(uuid),
   public.can_write_item(uuid),
+  public.can_manage_project(uuid),
   public.workspace_seat_limit(uuid),
   public.workspace_seats_used(uuid),
   public.workspace_people(uuid),
@@ -1111,6 +1182,7 @@ grant execute on function
   public.can_write_project(uuid),
   public.can_read_item(uuid),
   public.can_write_item(uuid),
+  public.can_manage_project(uuid),
   public.workspace_seat_limit(uuid),
   public.workspace_seats_used(uuid),
   public.workspace_people(uuid),

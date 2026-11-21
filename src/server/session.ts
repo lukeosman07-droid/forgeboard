@@ -56,6 +56,7 @@ const RPC_MESSAGES: Record<string, string> = {
   invite_invalid: "This invite link has expired, was cancelled, or has already been used. Ask for a new one.",
   invite_wrong_email: "This invite was sent to a different email address. Sign in with that address to accept it.",
   not_allowed: "You don't have permission to do that.",
+  invalid_manager: "The project manager has to be a member of this workspace (not a guest).",
   owner_role_is_fixed: "The owner's role can only change by transferring ownership.",
   owner_cannot_leave: "The owner can't leave. Transfer ownership to someone else first.",
   invalid_new_owner: "Ownership can only go to an admin or member of this workspace.",

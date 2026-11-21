@@ -269,7 +269,7 @@ export async function addProjectMember(projectId: string, userId: string): Promi
   const { error } = await supabase.from("project_members").insert({ project_id: projectId, user_id: userId });
   // 23505: already shared with them, which is what was asked for.
   if (error && error.code !== "23505") {
-    return { error: isDenied(error) ? "Only members of this workspace can share its projects." : "Couldn't share the project." };
+    return { error: isDenied(error) ? "Only the project manager or an admin can share this project." : "Couldn't share the project." };
   }
   refresh();
   return { ok: true };
@@ -282,7 +282,7 @@ export async function removeProjectMember(projectId: string, userId: string): Pr
     await supabase.from("project_members").delete().eq("project_id", projectId).eq("user_id", userId).select("project_id"),
     "Couldn't remove access.",
   );
-  if (error) return { error: "You don't have permission to change who this project is shared with." };
+  if (error) return { error: "Only the project manager or an admin can change who this project is shared with." };
   refresh();
   return { ok: true };
 }

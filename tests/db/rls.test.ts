@@ -344,9 +344,32 @@ describe("roles", () => {
     expect(role.error?.message).toContain("not_allowed");
   });
 
-  it("a member can invite a guest to a project they can edit", async () => {
-    const { error } = await invite(member, x, `client-${stamp}@example.test`, "guest", rows.projects);
-    expect(error).toBeNull();
+  it("a project's PM can invite a guest to it; another member can't", async () => {
+    // The member created rows.projects, so they are its PM. The owner created privateProject.
+    const { data } = await admin.from("projects").select("id, manager_id").in("id", [rows.projects, privateProject]);
+    expect(Object.fromEntries((data ?? []).map((p) => [p.id, p.manager_id]))).toEqual({ [rows.projects]: member.id, [privateProject]: owner.id });
+
+    expect((await invite(member, x, `client-${stamp}@example.test`, "guest", rows.projects)).error).toBeNull();
+    const notPm = await invite(member, x, `client2-${stamp}@example.test`, "guest", privateProject);
+    expect(notPm.error?.message).toContain("not_allowed");
+    const share = await member.client.from("project_members").insert({ project_id: privateProject, user_id: guest.id });
+    expect(share.error).not.toBeNull();
+  });
+
+  it("only admins choose the PM, and it must be a member", async () => {
+    const self = await member.client.from("projects").update({ manager_id: member.id }).eq("id", privateProject).select("id");
+    expect(self.error?.message).toContain("not_allowed");
+    const toGuest = await adminUser.client.from("projects").update({ manager_id: guest.id }).eq("id", privateProject).select("id");
+    expect(toGuest.error?.message).toContain("invalid_manager");
+    const toOutsider = await owner.client.from("projects").update({ manager_id: outsider.id }).eq("id", privateProject).select("id");
+    expect(toOutsider.error?.message).toContain("invalid_manager");
+
+    const byAdmin = await adminUser.client.from("projects").update({ manager_id: member.id }).eq("id", privateProject).select("id");
+    expect(byAdmin.error).toBeNull();
+    // Editing a project you don't manage still works; only the PM field is guarded.
+    const rename = await member.client.from("projects").update({ name: "Renamed private" }).eq("id", privateProject).select("id");
+    expect(rename.data).toHaveLength(1);
+    await owner.client.from("projects").update({ manager_id: owner.id }).eq("id", privateProject);
   });
 
   it("an admin can't create admins or touch the owner; the owner can", async () => {
@@ -444,12 +467,16 @@ describe("leaving and ownership", () => {
     for (const p of pending ?? []) await owner.client.rpc("revoke_invite", { p_invite: p.id });
     await join(owner, ws, temp, "member");
 
+    const tempProject = await insert(temp.client, "projects", { workspace_id: ws, name: "Temp's project" }); // temp is its PM
     const task = await insert(member.client, "items", { project_id: rows.projects, type: "action_item", title: "Temp's task", assignee: "User TEMP", assignee_id: temp.id });
     const { error } = await adminUser.client.rpc("remove_member", { p_workspace: ws, p_user: temp.id });
     expect(error).toBeNull();
 
     const { data: row } = await admin.from("items").select("assignee, assignee_id").eq("id", task).single();
     expect(row).toEqual({ assignee: "User TEMP", assignee_id: null });
+    // Their project stays, with no PM (admins manage its sharing until one is named).
+    const { data: project } = await admin.from("projects").select("manager_id").eq("id", tempProject).single();
+    expect(project).toEqual({ manager_id: null });
     const { data } = await temp.client.from("items").select("id").eq("id", task);
     expect(data ?? []).toHaveLength(0);
   });

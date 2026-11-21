@@ -3,7 +3,7 @@
 import { refresh, revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Id, NewProjectSchema, ProjectPatchSchema, firstIssue, type ActionResult, type NewProjectInput, type ProjectPatch } from "./schemas";
-import { NO_ACCESS, isDenied, refused, session, workspaceFor } from "./session";
+import { NO_ACCESS, isDenied, refused, rpcMessage, session, workspaceFor } from "./session";
 
 // Projects. The database sets workspace_id on everything inside a project and
 // checks the caller's role, so these actions only validate and report.
@@ -81,6 +81,17 @@ export async function updateProject(projectId: string, patch: ProjectPatch): Pro
   const { supabase } = await session();
   const error = refused(await supabase.from("projects").update(parsed.data).eq("id", projectId).select("id"), "Couldn't save the project.");
   if (error) return { error };
+  refresh();
+  return { ok: true };
+}
+
+/** Names the project's PM (or nobody). Admins only; the PM must be a member, not a guest. */
+export async function setProjectManager(projectId: string, userId: string | null): Promise<ActionResult> {
+  if (!Id.safeParse(projectId).success || (userId !== null && !Id.safeParse(userId).success)) return { error: "Invalid change." };
+  const { supabase } = await session();
+  const result = await supabase.from("projects").update({ manager_id: userId }).eq("id", projectId).select("id");
+  if (result.error) return { error: rpcMessage(result.error, "Couldn't change the project manager.") };
+  if (!result.data?.length) return { error: NO_ACCESS };
   refresh();
   return { ok: true };
 }

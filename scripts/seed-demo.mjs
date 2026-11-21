@@ -308,7 +308,7 @@ const PROJECTS = [
 async function createSampleProject(ownerId, workspaceId, def) {
   const { data: project, error: projectError } = await supabase
     .from("projects")
-    .insert({ workspace_id: workspaceId, created_by: ownerId, name: def.name, description: def.description, color: def.color })
+    .insert({ workspace_id: workspaceId, created_by: ownerId, manager_id: ownerId, name: def.name, description: def.description, color: def.color })
     .select()
     .single();
   if (projectError) fail(`create the "${def.name}" project`, projectError);

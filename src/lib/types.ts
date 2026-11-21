@@ -64,6 +64,8 @@ export type Project = {
   workspace_id: string;
   /** Who made the row. Null once that account is deleted. It does not control access. */
   created_by: string | null;
+  /** The project's PM: with admins, the only one who can bring guests in. Null: admins only. */
+  manager_id: string | null;
   name: string;
   description: string | null;
   color: ProjectColor;
