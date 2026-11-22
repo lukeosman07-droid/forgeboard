@@ -51,7 +51,8 @@ test("the members page lists the demo user as owner", async ({ page }) => {
   await page.getByRole("link", { name: "Members" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible();
   await expect(page.getByText(demo.email).first()).toBeVisible();
-  await expect(page.getByText(/\d+ of \d+ seats used/)).toBeVisible();
+  // Anchored: the home page's plan card also mentions seats.
+  await expect(page.getByText(/^\d+ of \d+ seats used$/)).toBeVisible();
 });
 
 test("settings shows the profile and locks the demo account", async ({ page }) => {

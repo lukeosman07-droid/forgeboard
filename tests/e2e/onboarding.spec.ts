@@ -30,10 +30,12 @@ test("a new signup reaches a populated project in under 3 minutes", async ({ pag
   const started = Date.now();
 
   await page.goto("/signup");
-  await page.getByLabel("Full name").fill("Nina New");
-  await page.getByLabel("Company").fill("Northwind Civil");
-  await page.getByLabel("Work email").fill(email);
-  await page.locator('input[name="password"]:visible').fill("signup-password-123");
+  // :visible skips the hidden copy React leaves behind while the page streams in.
+  const field = (name: string) => page.locator(`input[name="${name}"]:visible`);
+  await field("fullName").fill("Nina New");
+  await field("companyName").fill("Northwind Civil");
+  await field("email").fill(email);
+  await field("password").fill("signup-password-123");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByText("Check your inbox")).toBeVisible();
 
