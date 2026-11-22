@@ -44,8 +44,10 @@ test("a new signup reaches a populated project in under 3 minutes", async ({ pag
   await expect(page).toHaveURL(/\/w\/[a-z0-9-]+\/onboarding$/);
 
   // 1. Name the workspace.
-  await expect(page.getByRole("heading", { name: "Name your workspace" })).toBeVisible();
-  await page.getByLabel("Workspace name").fill("Northwind Civil");
+  // Scoped to the step's form: the sidebar's "Create workspace" form has a field with the same label.
+  const stepOne = page.locator("form").filter({ has: page.getByRole("heading", { name: "Name your workspace" }) });
+  await expect(stepOne).toBeVisible();
+  await stepOne.getByLabel("Workspace name").fill("Northwind Civil");
   await page.getByRole("button", { name: "Continue" }).click();
 
   // 2. Start from the sample project.
