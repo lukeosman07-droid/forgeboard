@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import InviteResult from "@/components/app/invite-result";
+import Link from "next/link";
 import { useWorkspace } from "@/components/app/workspace-context";
 import { Avatar } from "@/components/work/ui";
 import { ROLE_HELP, ROLE_LABELS, displayName, usesSeat } from "@/lib/people";
@@ -70,7 +71,23 @@ export default function MembersPanel({
 
       {ws.isAdmin && <RenameCard pending={pending} run={run} />}
 
-      {ws.isAdmin && (
+      {ws.isAdmin && ws.limits.readOnly && (
+        <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
+          <h2 className="text-lg font-semibold text-white">Invite people</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            This workspace is read-only, so no one new can be invited.{" "}
+            {isOwner ? (
+              <Link href={`/w/${ws.slug}/billing`} className="font-medium text-orange-400 hover:text-orange-300">
+                Choose a plan to unlock it →
+              </Link>
+            ) : (
+              "Ask the workspace owner to choose a plan."
+            )}
+          </p>
+        </section>
+      )}
+
+      {ws.isAdmin && !ws.limits.readOnly && (
         <InviteCard
           seats={seats}
           pendingSeats={pendingSeats}

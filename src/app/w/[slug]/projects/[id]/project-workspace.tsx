@@ -30,7 +30,8 @@ const VIEWS: { id: ViewId; label: string; icon: IconName }[] = [
   { id: "notes", label: "AI Notes", icon: "sparkles" },
 ];
 
-export type Usage = { paid: boolean; trialLeft: number };
+/** The workspace's AI runs this month. */
+export type Usage = { runsLeft: number; runsLimit: number };
 
 export type Filters = { search: string; owner: string; hideDone: boolean };
 

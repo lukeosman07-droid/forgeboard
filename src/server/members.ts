@@ -66,6 +66,8 @@ export type InviteOutcome = {
   /** Shown once, right after sending. Only its hash is stored. */
   link?: string;
   error?: string;
+  /** The plan is out of seats: offer an upgrade. */
+  upgrade?: boolean;
 };
 
 type Db = Awaited<ReturnType<typeof session>>["supabase"];
@@ -87,7 +89,8 @@ async function invite(
     p_token_hash: createHash("sha256").update(token, "utf8").digest("hex"),
     p_project: project?.id ?? null,
   });
-  if (error) return { email, error: rpcMessage(error, "Couldn't create the invite.") };
+  // Out of seats: the result offers an upgrade.
+  if (error) return { email, error: rpcMessage(error, "Couldn't create the invite."), upgrade: /seat_limit/.test(error.message) };
 
   const link = `${siteUrl()}/invite/${token}`;
   const emailed = await sendInviteEmail(email, {

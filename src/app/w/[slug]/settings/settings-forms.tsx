@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { MIN_PASSWORD_LENGTH } from "@/lib/account";
+import { deleteWorkspace } from "@/server/workspace";
 import { changeEmail, changePassword, deleteAccount, updateProfile, type SettingsState } from "./actions";
 
 const inputClass =
@@ -156,6 +157,48 @@ export function DeleteAccountForm({ locked, hasSubscription }: { locked: boolean
       <div className="flex flex-wrap gap-3">
         <Save pendingText="Deleting…" danger>
           Permanently delete my account
+        </Save>
+        <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function DeleteWorkspaceForm({ slug, name, locked, subscribed }: { slug: string; name: string; locked: boolean; subscribed: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [state, action] = useActionState<SettingsState, FormData>(async () => {
+    const result = await deleteWorkspace(slug, typed);
+    return result.error ? { error: result.error } : {};
+  }, {});
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        disabled={locked}
+        className="rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        Delete this workspace…
+      </button>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-4">
+      <Result state={state} />
+      <p className="text-sm text-slate-300">
+        This permanently deletes the workspace for everyone in it
+        {subscribed ? ", and cancels its subscription right away" : ""}. Export your data first if you want a copy. It can&apos;t be
+        undone.
+      </p>
+      <Input label={`Type the workspace name (${name}) to confirm`} name="confirmName" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" required />
+      <div className="flex flex-wrap gap-3">
+        <Save pendingText="Deleting…" danger disabled={typed.trim() !== name}>
+          Permanently delete workspace
         </Save>
         <button type="button" onClick={() => setOpen(false)} className="rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5">
           Cancel

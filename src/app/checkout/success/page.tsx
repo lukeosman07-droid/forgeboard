@@ -3,10 +3,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getCurrentUser } from "@/lib/auth";
-import { PLAN_LABELS, hasPaidAccess } from "@/lib/plans";
+import { PLAN_LABELS, PLAN_LIMITS } from "@/lib/plans";
 import { getStripe, isPaidPlan } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/types";
+import type { Workspace } from "@/lib/types";
 import { workspaceUrl } from "@/lib/workspaces";
 import WaitForWebhook from "./wait-for-webhook";
 
@@ -31,20 +31,24 @@ async function SuccessContent({ searchParams }: { searchParams: PageProps<"/chec
   const sessionId = typeof session_id === "string" ? session_id : null;
   if (!stripe || !sessionId) redirect(await workspaceUrl("/billing"));
 
-  // Which plan did they buy? Read from Stripe, and make sure the session is theirs.
+  // Which workspace and plan was bought? Read from Stripe. Row Level Security
+  // then only finds the workspace if this user is a member of it.
   const session = await stripe.checkout.sessions.retrieve(sessionId).catch(() => null);
-  if (!session || session.client_reference_id !== user.id) redirect(await workspaceUrl("/billing"));
+  const workspaceId = session?.client_reference_id;
+  if (!session || !workspaceId) redirect(await workspaceUrl("/billing"));
   const plan = isPaidPlan(session.metadata?.plan) ? session.metadata.plan : null;
 
   const supabase = await createClient();
-  const { data: profile } = await supabase!
-    .from("profiles")
-    .select("plan, subscription_status")
-    .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "plan" | "subscription_status">>();
+  const { data: workspace } = await supabase!
+    .from("workspaces")
+    .select("slug, name, plan, subscription_status")
+    .eq("id", workspaceId)
+    .maybeSingle<Pick<Workspace, "slug" | "name" | "plan" | "subscription_status">>();
+  if (!workspace) redirect(await workspaceUrl("/billing"));
 
   const label = plan ? PLAN_LABELS[plan] : "new";
-  const active = profile && hasPaidAccess(profile) && (!plan || profile.plan === plan);
+  const active =
+    ["active", "trialing", "past_due"].includes(workspace.subscription_status ?? "") && (!plan || workspace.plan === plan);
 
   if (!active) {
     return (
@@ -55,20 +59,20 @@ async function SuccessContent({ searchParams }: { searchParams: PageProps<"/chec
   }
 
   return (
-    <Card title={`You're on the ${PLAN_LABELS[profile.plan]} plan!`} celebrate>
+    <Card title={`${workspace.name} is on the ${PLAN_LABELS[workspace.plan]} plan!`} celebrate>
       <p className="mt-3 text-slate-300">
-        Thanks for subscribing. You now have unlimited AI extractions (up to 30 per hour) for your whole team.
-        A receipt is on its way to your email.
+        Thanks for subscribing. Your whole team now has {PLAN_LIMITS[workspace.plan].seats} seats and{" "}
+        {PLAN_LIMITS[workspace.plan].aiRuns.toLocaleString()} AI runs a month. A receipt is on its way to your email.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <Link
-          href="/dashboard"
+          href={`/w/${workspace.slug}`}
           className="rounded-lg bg-orange-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:bg-orange-400"
         >
           Go to your projects
         </Link>
         <Link
-          href="/dashboard/billing"
+          href={`/w/${workspace.slug}/billing`}
           className="rounded-lg border border-white/15 px-5 py-2.5 font-semibold text-white transition hover:bg-white/5"
         >
           View billing

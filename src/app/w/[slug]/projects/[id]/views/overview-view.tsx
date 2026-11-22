@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { StatusReport } from "@/lib/ai/assist-schema";
+import { useWorkspacePath } from "@/components/app/workspace-context";
 import { useTaskStore } from "@/components/work/task-store";
 import { Avatar, Icon, StatusPill, statusCounts } from "@/components/work/ui";
 import { formatDate, localToday, useToday } from "@/lib/dates";
@@ -25,6 +26,7 @@ export default function OverviewView({
   onOpenView: (view: ViewId) => void;
 }) {
   const today = useToday();
+  const path = useWorkspacePath();
   const { openTask } = useTaskStore();
   const counts = statusCounts(tasks);
   const total = tasks.length;
@@ -80,6 +82,11 @@ export default function OverviewView({
       </div>
 
       <AiStatusReport projectId={project.id} usage={usage} />
+      <p className="text-right text-xs">
+        <a href={path(`/projects/${project.id}/export`)} download className="text-slate-400 hover:text-white">
+          Export this project as CSV
+        </a>
+      </p>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Panel title="Status">
@@ -248,6 +255,8 @@ function AiStatusReport({ projectId, usage }: { projectId: string; usage: Usage 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; upgrade?: boolean }>();
   const [copied, setCopied] = useState(false);
+  const [runsLeft, setRunsLeft] = useState(usage.runsLeft);
+  const path = useWorkspacePath();
 
   async function generate() {
     setLoading(true);
@@ -259,8 +268,9 @@ function AiStatusReport({ projectId, usage }: { projectId: string; usage: Usage 
         body: JSON.stringify({ projectId, today: localToday() }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return setError({ message: body.error ?? "Something went wrong.", upgrade: body.code === "trial_exhausted" });
+      if (!res.ok) return setError({ message: body.error ?? "Something went wrong.", upgrade: body.code === "ai_limit" || body.code === "read_only" });
       setReport(body.report);
+      if (typeof body.runsLeft === "number") setRunsLeft(body.runsLeft);
     } catch {
       setError({ message: "Couldn't reach the server. Try again." });
     } finally {
@@ -317,14 +327,16 @@ function AiStatusReport({ projectId, usage }: { projectId: string; usage: Usage 
           </button>
         </div>
       </div>
-      {!usage.paid && !report && (
-        <p className="mt-3 text-xs text-slate-500">Uses 1 of your free AI runs ({usage.trialLeft} left).</p>
+      {!report && (
+        <p className="mt-3 text-xs text-slate-500">
+          Uses 1 AI run ({runsLeft.toLocaleString()} of {usage.runsLimit.toLocaleString()} left this month).
+        </p>
       )}
       {error && (
         <p role="alert" className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error.message}
           {error.upgrade && (
-            <Link href="/pricing" className="ml-2 font-semibold text-orange-300 underline">
+            <Link href={path("/billing")} className="ml-2 font-semibold text-orange-300 underline">
               See plans →
             </Link>
           )}

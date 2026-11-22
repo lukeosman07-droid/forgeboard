@@ -1,86 +1,107 @@
 import type Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isPaidPlan, planForPriceId, priceIdFor, profileUpdateFor } from "@/lib/stripe";
+import { subscriptionSyncFor } from "@/lib/billing/stripe-sync";
+import { isInterval, isPaidPlan, planForPriceId, priceIdFor } from "@/lib/stripe";
 
-// Only the fields profileUpdateFor reads.
-function subscription(status: string, priceId: string, customer: string | { id: string } = "cus_1") {
+// Only the fields subscriptionSyncFor reads.
+function subscription(status: string, priceId: string, customer: string | { id: string } = "cus_1", extra: Record<string, unknown> = {}) {
   return {
     id: "sub_1",
     status,
     customer,
-    items: { data: [{ price: { id: priceId } }] },
+    cancel_at_period_end: false,
+    cancel_at: null,
+    items: { data: [{ price: { id: priceId }, current_period_end: 1_800_000_000 }] },
+    ...extra,
   } as unknown as Stripe.Subscription;
 }
 
+const PRICES = {
+  STRIPE_PRICE_STARTER_MONTHLY: "price_starter_m",
+  STRIPE_PRICE_STARTER_ANNUAL: "price_starter_y",
+  STRIPE_PRICE_TEAM_MONTHLY: "price_team_m",
+  STRIPE_PRICE_TEAM_ANNUAL: "price_team_y",
+  STRIPE_PRICE_BUSINESS_MONTHLY: "price_business_m",
+  STRIPE_PRICE_BUSINESS_ANNUAL: "price_business_y",
+  STRIPE_PRICE_TEAM: "price_team_legacy",
+  STRIPE_PRICE_BUSINESS: "price_business_legacy",
+};
+
 beforeEach(() => {
-  vi.stubEnv("STRIPE_PRICE_TEAM", "price_team");
-  vi.stubEnv("STRIPE_PRICE_BUSINESS", "price_business");
+  for (const [name, value] of Object.entries(PRICES)) vi.stubEnv(name, value);
 });
 afterEach(() => vi.unstubAllEnvs());
 
-describe("isPaidPlan", () => {
-  it("accepts only the plans sold online", () => {
+describe("isPaidPlan and isInterval", () => {
+  it("accept only the plans sold online", () => {
+    expect(isPaidPlan("starter")).toBe(true);
     expect(isPaidPlan("team")).toBe(true);
     expect(isPaidPlan("business")).toBe(true);
     expect(isPaidPlan("enterprise")).toBe(false);
-    expect(isPaidPlan("free")).toBe(false);
+    expect(isPaidPlan("trial")).toBe(false);
     expect(isPaidPlan(undefined)).toBe(false);
+  });
+
+  it("accept only month and year", () => {
+    expect(isInterval("month")).toBe(true);
+    expect(isInterval("year")).toBe(true);
+    expect(isInterval("week")).toBe(false);
   });
 });
 
 describe("price and plan lookup", () => {
-  it("maps each plan to its price and back", () => {
-    expect(priceIdFor("team")).toBe("price_team");
-    expect(priceIdFor("business")).toBe("price_business");
-    expect(planForPriceId("price_team")).toBe("team");
-    expect(planForPriceId("price_business")).toBe("business");
+  it("maps each plan and interval to its price and back", () => {
+    expect(priceIdFor("starter", "month")).toBe("price_starter_m");
+    expect(priceIdFor("team", "year")).toBe("price_team_y");
+    expect(priceIdFor("business", "month")).toBe("price_business_m");
+    expect(planForPriceId("price_starter_y")).toEqual({ plan: "starter", interval: "year" });
+    expect(planForPriceId("price_business_m")).toEqual({ plan: "business", interval: "month" });
   });
 
-  it("returns null for a price that isn't ours", () => {
+  it("still recognizes the pre-Phase 2 prices as monthly", () => {
+    expect(planForPriceId("price_team_legacy")).toEqual({ plan: "team", interval: "month" });
+    expect(planForPriceId("price_business_legacy")).toEqual({ plan: "business", interval: "month" });
+  });
+
+  it("returns nothing for a price that isn't ours or isn't set", () => {
     expect(planForPriceId("price_other")).toBeNull();
     expect(planForPriceId(null)).toBeNull();
-    expect(planForPriceId(undefined)).toBeNull();
-  });
-
-  it("doesn't match an empty price when the env vars are missing", () => {
-    vi.stubEnv("STRIPE_PRICE_TEAM", "");
+    vi.stubEnv("STRIPE_PRICE_STARTER_MONTHLY", "");
+    expect(priceIdFor("starter", "month")).toBeUndefined();
     expect(planForPriceId("")).toBeNull();
   });
 });
 
-describe("profileUpdateFor", () => {
-  it("grants the plan for an active subscription", () => {
-    expect(profileUpdateFor(subscription("active", "price_business"))).toEqual({
-      plan: "business",
-      subscription_status: "active",
-      stripe_customer_id: "cus_1",
-      stripe_subscription_id: "sub_1",
-    });
-  });
-
-  it("keeps the plan name but passes through a past_due status", () => {
-    expect(profileUpdateFor(subscription("past_due", "price_team"))).toMatchObject({
+describe("subscriptionSyncFor", () => {
+  it("grants the plan and interval for an active subscription", () => {
+    expect(subscriptionSyncFor(subscription("active", "price_team_y"))).toEqual({
       plan: "team",
-      subscription_status: "past_due",
+      interval: "year",
+      status: "active",
+      customerId: "cus_1",
+      subscriptionId: "sub_1",
+      periodEnd: new Date(1_800_000_000 * 1000).toISOString(),
+      cancelAtPeriodEnd: false,
     });
   });
 
-  it("returns the account to free when the subscription has ended", () => {
+  it("passes through past_due so the grace period can apply", () => {
+    expect(subscriptionSyncFor(subscription("past_due", "price_starter_m"))).toMatchObject({ plan: "starter", status: "past_due" });
+  });
+
+  it("reports an ended subscription with no plan", () => {
     for (const status of ["canceled", "incomplete_expired"]) {
-      expect(profileUpdateFor(subscription(status, "price_team"))).toEqual({
-        plan: "free",
-        subscription_status: "canceled",
-        stripe_customer_id: "cus_1",
-        stripe_subscription_id: null,
-      });
+      expect(subscriptionSyncFor(subscription(status, "price_team_m"))).toMatchObject({ plan: null, status });
     }
   });
 
-  it("ignores a subscription on a price it doesn't know", () => {
-    expect(profileUpdateFor(subscription("active", "price_other"))).toBeNull();
+  it("ignores a first payment in progress and unknown prices", () => {
+    expect(subscriptionSyncFor(subscription("incomplete", "price_team_m"))).toBeNull();
+    expect(subscriptionSyncFor(subscription("active", "price_other"))).toBeNull();
   });
 
-  it("reads the customer ID from an expanded customer object", () => {
-    expect(profileUpdateFor(subscription("active", "price_team", { id: "cus_9" }))?.stripe_customer_id).toBe("cus_9");
+  it("notes a scheduled cancellation and reads an expanded customer", () => {
+    const sync = subscriptionSyncFor(subscription("active", "price_team_m", { id: "cus_9" }, { cancel_at_period_end: true }));
+    expect(sync).toMatchObject({ customerId: "cus_9", cancelAtPeriodEnd: true });
   });
 });

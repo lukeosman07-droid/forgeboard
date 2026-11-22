@@ -1,11 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
-import { getStripe, profileUpdateFor } from "@/lib/stripe";
+import { siteUrl } from "@/lib/account";
+import { handleStripeEvent } from "@/lib/billing/stripe-sync";
+import { sendPaymentFailedEmail } from "@/lib/email";
+import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // POST /api/stripe/webhook
-// Stripe calls this when a checkout finishes or a subscription changes. This is the
-// ONLY place plans are granted or removed; the success page just reads the result.
+// Stripe calls this when a checkout finishes, a subscription changes, or an
+// invoice is paid or fails. This is the ONLY place plans are granted or removed.
+// It uses the service-role client because billing columns can't be written by
+// users at all; the signature check below is what makes the call trustworthy.
 export async function POST(request: NextRequest) {
   const stripe = getStripe();
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -28,68 +33,40 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object;
-        if (session.mode === "subscription" && session.subscription) {
-          const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-          await syncSubscription(stripe, admin, subId, session.client_reference_id);
-        }
-        break;
-      }
-      case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
-        await syncSubscription(stripe, admin, event.data.object.id, null);
-        break;
-      }
-      default:
-        // Other events are ignored. They still get a 200 so Stripe doesn't retry them.
-        break;
-    }
+    const outcome = await handleStripeEvent(event, {
+      stripe,
+      admin,
+      onPaymentFailed: async (workspaceId) => {
+        const { data: workspace } = await admin
+          .from("workspaces")
+          .select("name, slug, grace_ends_at")
+          .eq("id", workspaceId)
+          .maybeSingle<{ name: string; slug: string; grace_ends_at: string | null }>();
+        const { data: owner } = await admin
+          .from("workspace_members")
+          .select("user_id")
+          .eq("workspace_id", workspaceId)
+          .eq("role", "owner")
+          .maybeSingle<{ user_id: string }>();
+        const { data: profile } = owner
+          ? await admin.from("profiles").select("email").eq("id", owner.user_id).maybeSingle<{ email: string | null }>()
+          : { data: null };
+        const to = profile?.email;
+        if (!workspace || !to) return;
+        await sendPaymentFailedEmail(to, {
+          workspaceName: workspace.name,
+          graceEndsOn: workspace.grace_ends_at
+            ? new Date(workspace.grace_ends_at).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" })
+            : "the end of the grace period",
+          link: `${siteUrl()}/w/${workspace.slug}/billing`,
+        });
+      },
+    });
+    return NextResponse.json({ received: true, outcome });
   } catch (err) {
     // A 500 makes Stripe retry later, so a brief database hiccup doesn't lose a payment.
+    // The event isn't recorded as handled until it succeeds.
     console.error(`Stripe webhook: failed to handle ${event.type}`, err);
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
-
-  return NextResponse.json({ received: true });
-}
-
-// Always re-reads the subscription from Stripe instead of trusting the event payload,
-// so events arriving late or out of order still leave the profile correct.
-async function syncSubscription(
-  stripe: Stripe,
-  admin: NonNullable<ReturnType<typeof createAdminClient>>,
-  subscriptionId: string,
-  userIdHint: string | null,
-) {
-  const sub = await stripe.subscriptions.retrieve(subscriptionId);
-  const update = profileUpdateFor(sub);
-  if (!update) {
-    console.warn(`Stripe webhook: subscription ${sub.id} uses a price that isn't STRIPE_PRICE_TEAM or STRIPE_PRICE_BUSINESS; ignored.`);
-    return;
-  }
-
-  // Find the Forgeboard account: checkout passes the user id directly, and the
-  // subscription carries it in metadata. Fall back to the saved customer id.
-  const userId = userIdHint ?? sub.metadata?.supabase_user_id ?? null;
-  const query = admin.from("profiles").select("id, stripe_subscription_id");
-  const { data: profile, error } = await (userId
-    ? query.eq("id", userId)
-    : query.eq("stripe_customer_id", update.stripe_customer_id)
-  ).maybeSingle<{ id: string; stripe_subscription_id: string | null }>();
-  if (error) throw error;
-  if (!profile) {
-    console.warn(`Stripe webhook: no Forgeboard account found for subscription ${sub.id}; ignored.`);
-    return;
-  }
-
-  // An old subscription ending must not wipe out a newer one on the same account.
-  if (!update.stripe_subscription_id && profile.stripe_subscription_id && profile.stripe_subscription_id !== sub.id) {
-    return;
-  }
-
-  const { error: updateError } = await admin.from("profiles").update(update).eq("id", profile.id);
-  if (updateError) throw updateError;
-  console.log(`Stripe webhook: ${profile.id} -> plan=${update.plan} status=${update.subscription_status}`);
 }

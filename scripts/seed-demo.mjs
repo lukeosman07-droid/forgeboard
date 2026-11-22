@@ -102,13 +102,11 @@ async function main() {
       email: DEMO_EMAIL,
       full_name: userMetadata.full_name,
       company_name: userMetadata.company_name,
-      plan: "business",
-      subscription_status: "active",
     },
     { onConflict: "id" },
   );
   if (profileError) fail("set up the demo profile", profileError);
-  console.log("  ✓ Profile set to Business plan (active)");
+  console.log("  ✓ Profile ready");
 
   // 3. The demo's workspace. Sign-up creates one for every account; this finds
   //    the oldest workspace the demo user owns, and renames it to match.
@@ -120,9 +118,22 @@ async function main() {
   if (wsError) fail("find the demo workspace (has the workspaces migration been run?)", wsError);
   const workspaceId = owned.sort((a, b) => a.workspaces.created_at.localeCompare(b.workspaces.created_at))[0]?.workspace_id;
   if (!workspaceId) fail("find the demo workspace", new Error("the demo user owns no workspace"));
-  const { error: renameError } = await supabase.from("workspaces").update({ name: userMetadata.company_name }).eq("id", workspaceId);
-  if (renameError) fail("name the demo workspace", renameError);
-  console.log(`  ✓ Workspace "${userMetadata.company_name}" ready`);
+  // Plans live on the workspace (Phase 2). The demo is on Business with no
+  // Stripe subscription, already past onboarding, with the checklist hidden.
+  const { error: renameError } = await supabase
+    .from("workspaces")
+    .update({
+      name: userMetadata.company_name,
+      plan: "business",
+      subscription_status: "active",
+      trial_ends_at: new Date().toISOString(),
+      grace_ends_at: null,
+      onboarded_at: new Date().toISOString(),
+      checklist_dismissed_at: new Date().toISOString(),
+    })
+    .eq("id", workspaceId);
+  if (renameError) fail("set up the demo workspace", renameError);
+  console.log(`  ✓ Workspace "${userMetadata.company_name}" ready (Business plan)`);
 
   // 4. Replace the sample projects so re-runs don't create duplicates.
   //    Deleting a project also deletes its sections, notes, items, subtasks and comments.

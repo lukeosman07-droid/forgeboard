@@ -87,10 +87,10 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
       const res = await fetch("/api/ai/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, today: localToday() }),
+        body: JSON.stringify({ workspace: slug, name, description, today: localToday() }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return setError({ message: body.error ?? "Something went wrong.", upgrade: body.code === "trial_exhausted" });
+      if (!res.ok) return setError({ message: body.error ?? "Something went wrong.", upgrade: body.code === "ai_limit" || body.code === "read_only" });
       setAiPlan(body.plan);
     } catch {
       setError({ message: "Couldn't reach the server. Try again." });
@@ -160,7 +160,7 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
           <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
             {error.message}
             {error.upgrade && (
-              <Link href="/pricing" className="ml-2 font-semibold text-orange-300 underline">
+              <Link href={`/w/${slug}/billing`} className="ml-2 font-semibold text-orange-300 underline">
                 See plans →
               </Link>
             )}

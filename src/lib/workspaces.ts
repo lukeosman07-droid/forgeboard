@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { canEdit, isAdmin } from "@/lib/people";
+import { toPlanState, type PlanState, type WorkspaceLimitsRow } from "@/lib/plans";
 import { createClient } from "@/lib/supabase/server";
 import type { Person, Role, Workspace } from "@/lib/types";
 
@@ -9,14 +10,20 @@ import type { Person, Role, Workspace } from "@/lib/types";
 // to its members, so "not found" and "not yours" look the same from here.
 
 /** Members can't read the Stripe columns, so the columns are always listed. */
-export const WORKSPACE_COLUMNS = "id, name, slug, plan, subscription_status, trial_ends_at, created_at";
+export const WORKSPACE_COLUMNS =
+  "id, name, slug, plan, subscription_status, trial_ends_at, grace_ends_at, billing_interval, current_period_end, cancel_at_period_end, storage_bytes_used, onboarded_at, checklist_dismissed_at, created_at";
 
 export type WorkspaceAccess = {
   workspace: Workspace;
   user: CurrentUser;
   role: Role;
-  /** Owner, admin or member. Guests can only read and comment. */
+  /**
+   * Owner, admin or member, and the workspace isn't read-only (trial over or
+   * unpaid). Guests can only read and comment.
+   */
   canEdit: boolean;
+  /** Plan, limits, usage and read-only state, from workspace_limits(). */
+  plan: PlanState;
   /** Owner or admin. */
   isAdmin: boolean;
   people: Person[];
@@ -31,12 +38,17 @@ export const getWorkspace = cache(async (slug: string): Promise<WorkspaceAccess 
   const { data: workspace } = await supabase.from("workspaces").select(WORKSPACE_COLUMNS).eq("slug", slug).maybeSingle<Workspace>();
   if (!workspace) return null;
 
-  const { data } = await supabase.rpc("workspace_people", { ws: workspace.id });
+  const [{ data }, { data: limits }] = await Promise.all([
+    supabase.rpc("workspace_people", { ws: workspace.id }),
+    supabase.rpc("workspace_limits", { ws: workspace.id }),
+  ]);
   const people = (data ?? []) as Person[];
   const role = people.find((p) => p.user_id === user.id)?.role;
-  if (!role) return null;
+  const limitsRow = (limits as WorkspaceLimitsRow[] | null)?.[0];
+  if (!role || !limitsRow) return null;
+  const plan = toPlanState(limitsRow);
 
-  return { workspace, user, role, canEdit: canEdit(role), isAdmin: isAdmin(role), people };
+  return { workspace, user, role, canEdit: canEdit(role) && !plan.readOnly, isAdmin: isAdmin(role), plan, people };
 });
 
 export type WorkspaceSummary = Pick<Workspace, "id" | "name" | "slug" | "plan"> & { role: Role };

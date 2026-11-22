@@ -5,7 +5,8 @@ import { isDemoAccount } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
-import { DeleteAccountForm, EmailForm, PasswordForm, ProfileForm } from "./settings-forms";
+import { getWorkspace } from "@/lib/workspaces";
+import { DeleteAccountForm, DeleteWorkspaceForm, EmailForm, PasswordForm, ProfileForm } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings – Forgeboard" };
 
@@ -13,31 +14,33 @@ const NOTICES: Record<string, string> = {
   "password-updated": "Your password has been changed and your other devices were signed out.",
 };
 
-export default function SettingsPage({ searchParams }: PageProps<"/w/[slug]/settings">) {
+export default function SettingsPage({ params, searchParams }: PageProps<"/w/[slug]/settings">) {
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-white">Settings</h1>
-        <p className="mt-1 text-slate-400">Your profile, login details and account.</p>
+        <p className="mt-1 text-slate-400">Your profile, login details, workspace data and account.</p>
       </div>
       <Suspense fallback={<div className="h-96 animate-pulse rounded-2xl border border-white/10 bg-slate-900/60" />}>
-        <SettingsContent searchParams={searchParams} />
+        <SettingsContent params={params} searchParams={searchParams} />
       </Suspense>
     </div>
   );
 }
 
-async function SettingsContent({ searchParams }: { searchParams: PageProps<"/w/[slug]/settings">["searchParams"] }) {
-  const { notice } = await searchParams;
+async function SettingsContent({ params, searchParams }: PageProps<"/w/[slug]/settings">) {
+  const [{ slug }, { notice }] = await Promise.all([params, searchParams]);
   const user = await getCurrentUser();
   const supabase = await createClient();
   if (!user || !supabase) redirect("/login?next=/dashboard/settings");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, company_name, stripe_subscription_id")
-    .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "full_name" | "company_name" | "stripe_subscription_id">>();
+  const [{ data: profile }, access] = await Promise.all([
+    supabase.from("profiles").select("full_name, company_name").eq("id", user.id).maybeSingle<Pick<Profile, "full_name" | "company_name">>(),
+    getWorkspace(slug),
+  ]);
+  const workspace = access?.workspace;
+  const isOwner = access?.role === "owner";
+  const subscribed = Boolean(workspace && workspace.plan !== "trial" && workspace.subscription_status && workspace.subscription_status !== "canceled");
 
   const demo = isDemoAccount(user.email);
   const noticeText = typeof notice === "string" ? NOTICES[notice] : undefined;
@@ -67,8 +70,29 @@ async function SettingsContent({ searchParams }: { searchParams: PageProps<"/w/[
         <PasswordForm locked={demo} />
       </Card>
 
+      {workspace && access?.isAdmin && (
+        <Card title="Export data" text="Download your data at any time, including while the workspace is read-only.">
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href={`/w/${workspace.slug}/export`}
+              download
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/5"
+            >
+              Export workspace (ZIP of CSV files)
+            </a>
+            <span className="text-xs text-slate-500">Each project also has its own CSV export on its overview.</span>
+          </div>
+        </Card>
+      )}
+
+      {workspace && isOwner && (
+        <Card title="Delete workspace" text={`Remove "${workspace.name}" and every project, task, note and comment in it.`} danger>
+          <DeleteWorkspaceForm slug={workspace.slug} name={workspace.name} locked={demo} subscribed={subscribed} />
+        </Card>
+      )}
+
       <Card title="Delete account" text="Remove your account and all of its data from Forgeboard." danger>
-        <DeleteAccountForm locked={demo} hasSubscription={!!profile?.stripe_subscription_id} />
+        <DeleteAccountForm locked={demo} hasSubscription={subscribed && isOwner} />
       </Card>
     </>
   );

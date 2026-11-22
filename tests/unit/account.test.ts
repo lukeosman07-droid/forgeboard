@@ -45,7 +45,8 @@ describe("siteUrl", () => {
 describe("safeNext", () => {
   it("allows same-site paths", () => {
     expect(safeNext("/dashboard")).toBe("/dashboard");
-    expect(safeNext(checkoutPath("team"))).toBe("/api/checkout?plan=team");
+    expect(safeNext(checkoutPath("team"))).toBe("/api/checkout?plan=team&interval=month");
+    expect(checkoutPath("starter", "year", "acme")).toBe("/api/checkout?plan=starter&interval=year&workspace=acme");
   });
 
   it("blocks anything that could leave the site", () => {

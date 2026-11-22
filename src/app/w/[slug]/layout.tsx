@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import AppShell from "@/components/AppShell";
+import SetupChecklist from "@/components/app/setup-checklist";
 import { WorkspaceProvider } from "@/components/app/workspace-context";
 import { displayName } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +31,8 @@ async function Shell({ params, children }: { params: Promise<{ slug: string }>; 
     supabase?.from("profiles").select("last_workspace_id").eq("id", user.id).maybeSingle<{ last_workspace_id: string | null }>(),
   ]);
   const me = people.find((p) => p.user_id === user.id);
+  // The setup checklist follows onboarding, for admins, until done or dismissed.
+  const showChecklist = access.isAdmin && access.canEdit && workspace.onboarded_at && !workspace.checklist_dismissed_at;
 
   return (
     <WorkspaceProvider
@@ -42,6 +45,7 @@ async function Shell({ params, children }: { params: Promise<{ slug: string }>; 
         role,
         canEdit: access.canEdit,
         isAdmin: access.isAdmin,
+        limits: access.plan,
         people,
       }}
       rememberAsLast={profile?.data?.last_workspace_id !== workspace.id}
@@ -50,6 +54,15 @@ async function Shell({ params, children }: { params: Promise<{ slug: string }>; 
         workspace={workspace}
         workspaces={workspaces}
         canEdit={access.canEdit}
+        plan={access.plan}
+        role={role}
+        checklist={
+          showChecklist ? (
+            <Suspense fallback={null}>
+              <SetupChecklist workspaceId={workspace.id} slug={workspace.slug} />
+            </Suspense>
+          ) : null
+        }
         user={{ id: user.id, email: user.email, name: me ? displayName(me) : (user.email?.split("@")[0] ?? "You") }}
       >
         {children}

@@ -66,14 +66,21 @@ export async function POST(request: NextRequest) {
     .join("\n")
     .slice(0, 40_000);
 
-  const claim = await claimAiUse(user.id);
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("id, slug")
+    .eq("id", project.data.workspace_id)
+    .maybeSingle<{ id: string; slug: string }>();
+  if (!workspace) return fail(404, "Project not found.");
+
+  const claim = await claimAiUse(workspace, user.id, "status_report");
   if (!claim.ok) return claim.response;
 
   const result = await writeStatusReport(lines, today);
   if (!result.ok) {
-    await claim.finish("failed");
+    await claim.finish("failed", result.usage);
     return fail(result.status, result.error);
   }
-  await claim.finish("succeeded");
-  return NextResponse.json({ report: result.data, freeRemaining: claim.freeRemaining });
+  await claim.finish("succeeded", result.usage);
+  return NextResponse.json({ report: result.data, runsLeft: claim.runsLeft });
 }

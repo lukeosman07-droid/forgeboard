@@ -1,5 +1,6 @@
 // Row shapes for the tables in supabase/migrations.
 
+/** The plan column on profiles: unused since Phase 2 (billing is on the workspace). */
 export type Plan = "free" | "team" | "business" | "enterprise";
 export type ItemType = "action_item" | "decision" | "risk" | "question";
 export type ItemStatus = "open" | "in_progress" | "stuck" | "done";
@@ -33,6 +34,15 @@ export type Workspace = {
   plan: WorkspacePlan;
   subscription_status: string | null;
   trial_ends_at: string;
+  /** Set when a payment fails; the workspace turns read-only once it passes. */
+  grace_ends_at: string | null;
+  billing_interval: "month" | "year" | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  storage_bytes_used: number;
+  /** Null until the first-run steps are done (new workspaces only). */
+  onboarded_at: string | null;
+  checklist_dismissed_at: string | null;
   created_at: string;
 };
 

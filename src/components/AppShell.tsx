@@ -4,8 +4,10 @@ import SidebarFrame, { MainNav, MainNavLinks } from "@/components/app/sidebar";
 import SidebarProjects, { SidebarProjectsFallback } from "@/components/app/sidebar-projects";
 import UserCard from "@/components/app/user-card";
 import WorkspaceSwitcher from "@/components/app/workspace-switcher";
+import PlanBanner from "@/components/app/plan-banner";
 import PlanBadge from "@/components/PlanBadge";
-import type { Workspace } from "@/lib/types";
+import type { PlanState } from "@/lib/plans";
+import type { Role, Workspace } from "@/lib/types";
 import type { WorkspaceSummary } from "@/lib/workspaces";
 
 // Frame for pages inside a workspace: sidebar (workspace switcher, navigation,
@@ -14,12 +16,19 @@ export default function AppShell({
   workspace,
   workspaces,
   canEdit,
+  plan,
+  role,
+  checklist,
   user,
   children,
 }: {
   workspace: Workspace;
   workspaces: WorkspaceSummary[];
   canEdit: boolean;
+  plan: PlanState;
+  role: Role;
+  /** The first-run checklist, when it should show. */
+  checklist?: React.ReactNode;
   user: { id: string; email: string | null; name: string };
   children: React.ReactNode;
 }) {
@@ -40,12 +49,12 @@ export default function AppShell({
       topbar={
         <>
           <CommandPalette />
-          <Suspense fallback={<span className="h-7 w-20 animate-pulse rounded-full bg-white/5" />}>
-            <PlanBadge slug={workspace.slug} />
-          </Suspense>
+          <PlanBadge slug={workspace.slug} plan={plan} />
         </>
       }
     >
+      <PlanBanner plan={plan} role={role} slug={workspace.slug} />
+      {checklist}
       {children}
     </SidebarFrame>
   );

@@ -2,6 +2,7 @@
 
 import { createContext, use, useCallback, useEffect, useMemo } from "react";
 import { rememberWorkspace } from "@/server/members";
+import type { PlanState } from "@/lib/plans";
 import type { Person, Role, WorkspacePlan } from "@/lib/types";
 
 // The workspace the current page belongs to, for client components: who is in
@@ -15,8 +16,10 @@ export type WorkspaceInfo = {
   plan: WorkspacePlan;
   userId: string;
   role: Role;
-  /** Owner, admin or member. Guests can only read and comment. */
+  /** Owner, admin or member, while the workspace isn't read-only. Guests can only read and comment. */
   canEdit: boolean;
+  /** Plan limits, usage and read-only state. */
+  limits: PlanState;
   /** Owner or admin. */
   isAdmin: boolean;
   people: Person[];

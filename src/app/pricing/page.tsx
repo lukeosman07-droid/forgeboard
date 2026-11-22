@@ -29,7 +29,7 @@ export default function PricingPage() {
         <Suspense>
           <CheckoutNotice />
         </Suspense>
-        <Pricing />
+        <Pricing full />
       </main>
       <Footer />
     </>

@@ -12,7 +12,10 @@ export const AI_MODELS = {
   standard: "claude-sonnet-5-5",
 } as const;
 
-export type AiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
+/** Tokens and timing of one call, recorded in ai_usage. Absent when the call never reached the model. */
+export type AiCallUsage = { model: string; inputTokens: number; outputTokens: number; latencyMs: number };
+
+export type AiResult<T> = ({ ok: true; data: T } | { ok: false; error: string; status: number }) & { usage?: AiCallUsage };
 
 /** What the user sees for each kind of failure. Callers can reword any of them. */
 export type AiMessages = {
@@ -74,14 +77,17 @@ export async function runStructured<T>(options: {
     return { ok: false, status: 502, error: messages.other };
   }
 
-  // Token and latency log. Phase 2 of docs/SPEC.md stores this in the ai_usage table.
-  console.log(
-    `AI ${options.feature}: model=${response.model} in=${response.usage.input_tokens} out=${response.usage.output_tokens} ms=${Date.now() - started}`,
-  );
+  // Tokens and latency go to the ai_usage table (through the caller's finish()).
+  const usage: AiCallUsage = {
+    model: response.model,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+    latencyMs: Date.now() - started,
+  };
 
-  if (response.stop_reason === "refusal") return { ok: false, status: 422, error: messages.refusal };
+  if (response.stop_reason === "refusal") return { ok: false, status: 422, error: messages.refusal, usage };
   if (response.stop_reason === "max_tokens" || !response.parsed_output) {
-    return { ok: false, status: 502, error: messages.incomplete };
+    return { ok: false, status: 502, error: messages.incomplete, usage };
   }
-  return { ok: true, data: response.parsed_output as T };
+  return { ok: true, data: response.parsed_output as T, usage };
 }

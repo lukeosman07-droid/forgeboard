@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
-import { logIn, workspaceBase } from "./helpers";
+import { logIn, markOnboarded, workspaceBase } from "./helpers";
 
 // Phase 1 acceptance, in the browser:
 //   * A invites B, B accepts and sees A's projects.
@@ -38,6 +38,7 @@ test.beforeAll(async () => {
     if (error || !data.user) throw new Error(`Couldn't create ${person.email}: ${error?.message}`);
     ids.push(data.user.id);
   }
+  await markOnboarded(admin, ids);
   const { data: membership } = await admin.from("workspace_members").select("workspace_id").eq("user_id", ids[0]).single();
   workspaceId = membership!.workspace_id;
   const insert = async (name: string) =>

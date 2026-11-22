@@ -6,7 +6,8 @@ import type { ItemInput } from "@/server/schemas";
 import { saveExtraction } from "@/server/tasks";
 import type { Extraction } from "@/lib/ai/schema";
 import { localToday } from "@/lib/dates";
-import { FREE_TRIAL_EXTRACTIONS, MAX_NOTES_CHARS } from "@/lib/plans";
+import { useWorkspacePath } from "@/components/app/workspace-context";
+import { MAX_NOTES_CHARS } from "@/lib/plans";
 import { SAMPLE_NOTES } from "@/lib/sample-notes";
 import type { Usage } from "./project-workspace";
 
@@ -51,12 +52,13 @@ export default function AiExtractPanel({
   const [failure, setFailure] = useState<Failure>();
   const [review, setReview] = useState<Review>();
   const [submittedText, setSubmittedText] = useState("");
-  const [trialLeft, setTrialLeft] = useState(usage.trialLeft);
+  const [runsLeft, setRunsLeft] = useState(usage.runsLeft);
+  const path = useWorkspacePath();
   const [savedMessage, setSavedMessage] = useState<string>();
   const [saving, startSaving] = useTransition();
 
   const tooLong = text.length > MAX_NOTES_CHARS;
-  const outOfTrial = !usage.paid && trialLeft <= 0;
+  const outOfRuns = runsLeft <= 0;
 
   async function extract() {
     setFailure(undefined);
@@ -70,12 +72,12 @@ export default function AiExtractPanel({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (body.code === "trial_exhausted") setTrialLeft(0);
-        setFailure({ message: body.error ?? "Something went wrong. Please try again.", upgrade: body.code === "trial_exhausted" });
+        if (body.code === "ai_limit") setRunsLeft(0);
+        setFailure({ message: body.error ?? "Something went wrong. Please try again.", upgrade: body.code === "ai_limit" || body.code === "read_only" });
         return;
       }
       const data: Extraction = body.extraction;
-      if (typeof body.freeRemaining === "number") setTrialLeft(body.freeRemaining);
+      if (typeof body.runsLeft === "number") setRunsLeft(body.runsLeft);
       setSubmittedText(text);
       setReview(toReview(data));
     } catch {
@@ -122,7 +124,7 @@ export default function AiExtractPanel({
           </span>
         </span>
         <span className="flex items-center gap-3">
-          <UsageBadge paid={usage.paid} trialLeft={trialLeft} />
+          <UsageBadge runsLeft={runsLeft} runsLimit={usage.runsLimit} />
           <span className="text-slate-400" aria-hidden>
             {open ? "▲" : "▼"}
           </span>
@@ -140,7 +142,7 @@ export default function AiExtractPanel({
             <div role="alert" className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {failure.message}
               {failure.upgrade && (
-                <Link href="/pricing" className="ml-2 font-semibold text-orange-300 underline hover:text-orange-200">
+                <Link href={path("/billing")} className="ml-2 font-semibold text-orange-300 underline hover:text-orange-200">
                   See plans →
                 </Link>
               )}
@@ -151,12 +153,14 @@ export default function AiExtractPanel({
             <ReviewScreen review={review} setReview={setReview} saving={saving} onSave={save} onDiscard={() => setReview(undefined)} />
           ) : loading ? (
             <LoadingState />
-          ) : outOfTrial ? (
+          ) : outOfRuns ? (
             <div className="rounded-xl border border-white/10 bg-slate-950/40 p-6 text-center">
-              <p className="font-semibold text-white">You&apos;ve used all {FREE_TRIAL_EXTRACTIONS} free AI extractions</p>
-              <p className="mt-1 text-sm text-slate-400">Upgrade to keep turning notes into organized projects. You can still add items by hand below.</p>
+              <p className="font-semibold text-white">This workspace has used all {usage.runsLimit.toLocaleString()} AI runs for this month</p>
+              <p className="mt-1 text-sm text-slate-400">
+                Upgrade for more, or wait until the 1st when the count resets. You can still add items by hand.
+              </p>
               <Link
-                href="/pricing"
+                href={path("/billing")}
                 className="mt-4 inline-block rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-orange-400"
               >
                 See plans
@@ -206,13 +210,12 @@ export default function AiExtractPanel({
   );
 }
 
-function UsageBadge({ paid, trialLeft }: { paid: boolean; trialLeft: number }) {
-  if (paid) return <span className="hidden rounded-full bg-white/5 px-2.5 py-1 text-xs text-slate-300 sm:inline">Unlimited</span>;
+function UsageBadge({ runsLeft, runsLimit }: { runsLeft: number; runsLimit: number }) {
   return (
     <span
-      className={`hidden rounded-full px-2.5 py-1 text-xs sm:inline ${trialLeft > 0 ? "bg-white/5 text-slate-300" : "bg-red-500/10 text-red-300"}`}
+      className={`hidden rounded-full px-2.5 py-1 text-xs sm:inline ${runsLeft > 0 ? "bg-white/5 text-slate-300" : "bg-red-500/10 text-red-300"}`}
     >
-      {trialLeft} of {FREE_TRIAL_EXTRACTIONS} free left
+      {runsLeft.toLocaleString()} of {runsLimit.toLocaleString()} AI runs left
     </span>
   );
 }

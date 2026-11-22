@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import NewProjectButton from "@/components/app/new-project";
-import { FREE_TRIAL_EXTRACTIONS, PLAN_LABELS, hasPaidAccess, trialExtractionsLeft } from "@/lib/plans";
-import type { Profile } from "@/lib/types";
+import { PLAN_LABELS, type PlanState } from "@/lib/plans";
 import { loadWorkspaceData } from "@/lib/workspace";
 import { getWorkspace } from "@/lib/workspaces";
 import HomeDashboard from "./home-dashboard";
@@ -12,6 +11,7 @@ export default async function DashboardContent({ params }: { params: Promise<{ s
   const access = await getWorkspace(slug);
   if (!access) notFound();
   const { workspace, user, canEdit } = access;
+  if (!workspace.onboarded_at && access.isAdmin && canEdit) redirect(`/w/${slug}/onboarding`);
 
   const { profile, projects, tasks, failed } = await loadWorkspaceData(workspace.id, user.id, access.people);
   if (failed) return <SetupNeeded />;
@@ -32,24 +32,22 @@ export default async function DashboardContent({ params }: { params: Promise<{ s
 
       {projects.length > 0 ? <HomeDashboard projects={projects} tasks={tasks} /> : canEdit ? <EmptyState /> : <GuestEmptyState />}
 
-      {profile && canEdit && <PlanCard profile={profile} slug={slug} />}
+      {canEdit && <PlanCard plan={access.plan} slug={slug} />}
     </div>
   );
 }
 
-function PlanCard({ profile, slug }: { profile: Profile; slug: string }) {
-  const paid = hasPaidAccess(profile);
-  const left = trialExtractionsLeft(profile);
-
+function PlanCard({ plan, slug }: { plan: PlanState; slug: string }) {
+  const left = Math.max(0, plan.aiRuns - plan.aiRunsUsed);
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-slate-900/60 px-5 py-4 text-sm sm:flex-row sm:items-center sm:justify-between">
       <p className="text-slate-300">
-        <span className="font-semibold text-white">{paid ? PLAN_LABELS[profile.plan] : PLAN_LABELS.free} plan</span>
+        <span className="font-semibold text-white">{PLAN_LABELS[plan.plan]}</span>
         {" · "}
-        {paid ? "Unlimited AI (notes, plans and status reports)" : `${left} of ${FREE_TRIAL_EXTRACTIONS} free AI runs left`}
+        {left.toLocaleString()} of {plan.aiRuns.toLocaleString()} AI runs left this month · {plan.seatsUsed} of {plan.seats} seats used
       </p>
-      <Link href={paid ? `/w/${slug}/billing` : "/pricing"} className="font-medium text-orange-400 hover:text-orange-300">
-        {paid ? "Manage billing →" : "Upgrade for unlimited AI →"}
+      <Link href={`/w/${slug}/billing`} className="font-medium text-orange-400 hover:text-orange-300">
+        {plan.plan === "trial" ? "Choose a plan →" : "Billing →"}
       </Link>
     </div>
   );

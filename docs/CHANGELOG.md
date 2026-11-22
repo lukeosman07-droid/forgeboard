@@ -2,6 +2,72 @@
 
 One entry per phase of [SPEC.md](SPEC.md): what shipped, what was skipped and why, and what still needs Luke.
 
+## Phase 2: Billing, plans and onboarding (Nov 22, 2026)
+
+Billing now belongs to the workspace, every plan limit is enforced by the database, and a new signup gets a guided start with a filled-in sample project.
+
+### Shipped
+
+**Database** (`supabase/migrations/20261121000000_billing.sql`)
+
+- Plans per workspace: trial (14 days), Starter, Team, Business, Enterprise. One function, `plan_limits()`, holds every limit: seats (5 / 5 / 15 / 50), AI runs per month (50 / 300 / 1,500 / 5,000), storage (1 / 5 / 50 / 250 GB) and feature gates (file AI and registers from Team, workload from Business). `workspace_limits()` returns the limits with current usage for the app.
+- Read-only mode, worked out from dates so nothing has to run on a schedule: a trial past its end, an ended subscription, or a failed payment past its 7-day grace period. Everyone can still read and export; nothing can be created, changed or invited until a plan is paid. Enterprise is never read-only.
+- Seat limit counts members plus pending invites; the 6th seat on Starter is refused. Guests stay free.
+- `ai_usage` replaces `ai_extraction_events` (old rows copied; the old table stays for one release). AI runs are counted per workspace per calendar month; failed and empty runs are given back; 30 runs per person per hour still applies. Owners and admins can read the log.
+- `stripe_events`: each Stripe event is handled once. `sync_workspace_subscription`, `record_payment_failed` (grace counts from the first failure and is never extended) and `record_payment_succeeded` are callable only by the server.
+- `delete_workspace`: owner only, the name typed to confirm, refused while a subscription is live. Deleting an account is also refused until billing is canceled (the app cancels it first).
+- The Phase 1 trigger copying billing from the profile to the workspace is removed.
+
+**Billing**
+
+- Checkout, the billing portal and plan changes all work per workspace and only for its owner. Monthly or annual for each plan. Switching plans with an existing subscription changes it in place with proration instead of starting a second one.
+- Webhook handles `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.payment_failed` and `invoice.paid`. It always re-reads the subscription from Stripe, so late or out-of-order events still end correct. A failed payment emails the owner.
+- Billing page: plan and status, renewal date, meters for seats, AI runs and storage, plan picker, invoice history, and a list of who to remove when a workspace has more people than a smaller plan allows. Non-owners see the plan and are told to ask the owner.
+- Banners across the app for a trial ending (last 3 days), a failed payment, too many people for the plan, and read-only. The sidebar badge shows trial days left. Upgrade prompts on the 6th invite and when AI runs run out.
+- Pricing page rewritten: monthly/annual toggle, Starter/Team/Business/Enterprise, a full comparison table and an FAQ (what counts as a seat, what happens after the trial, export, where data is stored, AI training).
+
+**Onboarding and export**
+
+- New workspaces start at `/w/<slug>/onboarding`: name the workspace, start a project (sample, template or AI plan), invite the team. The sample project ("Sample: Pump Station Retrofit") has a schedule, decisions, risks, a question and the meeting notes they came from.
+- Setup checklist on the workspace for admins until it's done or dismissed.
+- CSV export of any project (from its overview), and a ZIP of CSVs for the whole workspace (Settings, owners and admins). Exports work while read-only.
+- Settings: delete a workspace (owner, typed name, subscription canceled first).
+
+**Tests**
+
+- New `tests/db/billing.test.ts`: trial limits, members can't change billing, read-only on day 15 and unlock on payment, canceled subscription, 6th Starter seat refused, grace period and its end, a replayed Stripe event changes nothing, AI run counting and limits, workspace deletion.
+- New `tests/e2e/onboarding.spec.ts`: signs up, confirms the email, goes through onboarding to the sample project, under 3 minutes.
+- Unit tests for plans, prices, subscription sync, CSV escaping (including spreadsheet formulas) and the ZIP writer.
+
+### Skipped or deferred
+
+- **Storage limits** are in place but nothing uploads files until Phase 4, so storage use stays at 0.
+- **Registers and workload** gates exist in the database but those features arrive in later phases.
+- **Activity history limits** (14 / 90 / 365 days) are defined but the activity log is Phase 3.
+- **Email reminders before the trial ends** need a scheduled job; the in-app banner covers it for now.
+- **Old billing columns** on profiles and the old AI usage table stay for one release, unused, so a rollback is possible.
+
+### Deploying (Claude does this)
+
+1. Save a copy of every table in the live database.
+2. Run the migration on the live database, then merge `phase-2` into `main` and push (Vercel deploys).
+3. Re-seed the demo (Business plan, onboarded) and check the live site.
+
+### Still needs Luke
+
+1. **Stripe test prices (6).** In Stripe (test mode) → Product catalog, create three products with two recurring prices each: Starter $79/month and $790/year, Team $199/month and $1,990/year, Business $499/month and $4,990/year. Send Claude the six `price_...` IDs, or add them in Vercel as `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PRICE_TEAM_ANNUAL`, `STRIPE_PRICE_BUSINESS_MONTHLY`, `STRIPE_PRICE_BUSINESS_ANNUAL`, then redeploy. Until then, choosing a plan without a price returns to the pricing page and nothing is charged. Keep the old `STRIPE_PRICE_TEAM` / `STRIPE_PRICE_BUSINESS` while any subscription uses them.
+2. **Webhook events.** Stripe → Developers → Webhooks → the Forgeboard endpoint → add `customer.subscription.created`, `invoice.payment_failed` and `invoice.paid` to the events it sends.
+3. **Billing portal (optional).** Stripe → Settings → Billing → Customer portal: allow plan switching between the six prices if you want customers to change plans there as well as in the app.
+4. **Sales tax (optional).** Turn on Stripe Tax, then set `STRIPE_AUTOMATIC_TAX=true` in Vercel.
+
+### Decisions for Luke
+
+- Prices, limits and the 14-day trial use the spec's defaults. Annual is 10× monthly (two months free).
+- Grace period after a failed payment is 7 days, counted from the first failure. During grace everything works; after it, read-only.
+- When a trial or subscription ends, the workspace becomes read-only and is kept. It's never deleted automatically.
+- The trial gets Business features with Starter-sized limits (5 seats, 50 AI runs, 1 GB), so people can try everything.
+- Only the workspace owner sees billing details and can pay or change plans. Admins see usage.
+
 ## Phase 1: Workspaces and members (Nov 20, 2026)
 
 Forgeboard is now multi-user. Work belongs to a workspace (a firm or team), not to one account, and people join it by invite with one of four roles.

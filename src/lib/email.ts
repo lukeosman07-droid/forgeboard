@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import InviteEmail, { type InviteEmailProps } from "@/emails/invite";
+import PaymentFailedEmail, { type PaymentFailedEmailProps } from "@/emails/payment-failed";
 
 // Transactional email through Resend. Until RESEND_API_KEY is set, nothing is
 // sent and callers fall back to showing the link so it can be shared by hand.
@@ -38,6 +39,25 @@ export async function sendInviteEmail(to: string, props: InviteEmailProps): Prom
     return !error;
   } catch (err) {
     console.error("Invite email failed:", err);
+    return false;
+  }
+}
+
+/** Tells a workspace owner their payment failed. Returns false if email isn't set up or the send failed. */
+export async function sendPaymentFailedEmail(to: string, props: PaymentFailedEmailProps): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) return false;
+  try {
+    const { error } = await resend.emails.send({
+      from: fromAddress(),
+      to,
+      subject: `Payment failed for ${props.workspaceName} on Forgeboard`,
+      react: PaymentFailedEmail(props),
+    });
+    if (error) console.error("Payment-failed email failed:", error.name, error.message);
+    return !error;
+  } catch (err) {
+    console.error("Payment-failed email failed:", err);
     return false;
   }
 }

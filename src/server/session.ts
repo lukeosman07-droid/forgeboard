@@ -50,6 +50,10 @@ export function isDenied(error: unknown) {
 // Database functions signal expected failures with short codes in the message.
 const RPC_MESSAGES: Record<string, string> = {
   seat_limit: "Every seat on your plan is in use. Remove someone, cancel a pending invite, or upgrade to add more people.",
+  read_only: "This workspace is read-only until billing is sorted out. The owner can fix it on the Billing page.",
+  cancel_subscription_first: "This workspace still has an active subscription. Cancel it first.",
+  confirm_name_mismatch: "Type the workspace's name exactly as shown to confirm.",
+  demo_locked: "The shared demo workspace can't be deleted.",
   invite_limit: "This workspace has sent 20 invites in the last day. Please try again tomorrow.",
   already_member: "That person is already in this workspace.",
   invalid_invite: "Check the email address and role, then try again.",

@@ -41,7 +41,7 @@ ${text}
       incomplete: "The AI's answer was incomplete. Try splitting the notes into smaller parts.",
     },
   });
-  return result.ok ? { ok: true, data: cleanExtraction(result.data, text) } : result;
+  return result.ok ? { ok: true, data: cleanExtraction(result.data, text), usage: result.usage } : result;
 }
 
 function weekday(isoDate: string) {

@@ -33,27 +33,32 @@ export async function POST(request: NextRequest) {
     return fail(413, `That's ${text.length.toLocaleString()} characters. The limit is ${MAX_NOTES_CHARS.toLocaleString()}; split it into smaller parts.`);
   }
 
-  // Row Level Security means this only finds the project if the user owns it.
+  // Row Level Security means this only finds the project if the user can see it.
   const supabase = await createClient();
-  const { data: project } = (await supabase?.from("projects").select("id").eq("id", projectId).maybeSingle()) ?? {};
+  const { data: project } =
+    (await supabase
+      ?.from("projects")
+      .select("id, workspaces(id, slug)")
+      .eq("id", projectId)
+      .maybeSingle<{ id: string; workspaces: { id: string; slug: string } }>()) ?? {};
   if (!project) return fail(404, "Project not found.");
 
-  const claim = await claimAiUse(user.id);
+  const claim = await claimAiUse(project.workspaces, user.id, "extract");
   if (!claim.ok) return claim.response;
 
   const result = await extractFromNotes(text, safeToday(parsed.data.today));
 
   if (!result.ok) {
-    await claim.finish("failed"); // errors don't use up a trial run
+    await claim.finish("failed", result.usage); // errors don't use up a run
     return fail(result.status, result.error);
   }
   if (isEmptyExtraction(result.data)) {
-    await claim.finish("empty");
+    await claim.finish("empty", result.usage);
     return fail(422, "The AI didn't find any action items, decisions, risks, or questions in that text. Try pasting fuller notes.", {
       code: "nothing_found",
     });
   }
 
-  await claim.finish("succeeded");
-  return NextResponse.json({ extraction: result.data, freeRemaining: claim.freeRemaining });
+  await claim.finish("succeeded", result.usage);
+  return NextResponse.json({ extraction: result.data, runsLeft: claim.runsLeft });
 }

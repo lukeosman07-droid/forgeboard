@@ -4,8 +4,11 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { isDemoAccount, passwordProblem, siteUrl } from "@/lib/account";
+import { syncSubscription } from "@/lib/billing/stripe-sync";
 import { getStripe } from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { cancelSubscriptionNow, hasLiveSubscription } from "@/server/billing";
 import { rpcMessage } from "@/server/session";
 
 export type SettingsState = { error?: string; message?: string };
@@ -119,21 +122,25 @@ export async function deleteAccount(_prev: SettingsState, formData: FormData): P
   }
 
   // Stop billing first: never leave a subscription charging a deleted account.
-  // Users can't write the stripe_* columns, so this ID is one the webhook saved.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_subscription_id")
-    .eq("id", user.id)
-    .maybeSingle<{ stripe_subscription_id: string | null }>();
-  if (profile?.stripe_subscription_id) {
-    const stripe = getStripe();
-    if (!stripe) return { error: "Billing isn't reachable right now, so your subscription couldn't be cancelled. Please try again later." };
-    try {
-      await stripe.subscriptions.cancel(profile.stripe_subscription_id);
-    } catch (err) {
-      // "Already cancelled / doesn't exist" is fine; anything else stops the deletion.
-      const code = typeof err === "object" && err && "code" in err ? err.code : null;
-      if (code !== "resource_missing") {
+  // Members can't read the stripe_* columns, so the service-role client reads
+  // them for the workspaces this user owns (checked above with their own client).
+  if (ownedIds.length > 0) {
+    const admin = createAdminClient();
+    if (!admin) return { error: "Billing isn't reachable right now. Please try again later." };
+    const { data: billed } = await admin
+      .from("workspaces")
+      .select("id, stripe_subscription_id, subscription_status")
+      .in("id", ownedIds);
+    const live = (billed ?? []).filter(hasLiveSubscription);
+    if (live.length > 0) {
+      const stripe = getStripe();
+      if (!stripe) return { error: "Billing isn't reachable right now, so your subscription couldn't be canceled. Please try again later." };
+      try {
+        for (const ws of live) {
+          await cancelSubscriptionNow(stripe, ws.stripe_subscription_id!);
+          await syncSubscription(stripe, admin, ws.stripe_subscription_id!, ws.id);
+        }
+      } catch (err) {
         console.error("Account deletion: couldn't cancel subscription", err);
         return { error: "We couldn't cancel your subscription, so nothing was deleted. Please try again or contact support." };
       }

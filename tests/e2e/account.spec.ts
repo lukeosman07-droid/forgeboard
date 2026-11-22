@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
-import { logIn } from "./helpers";
+import { linkFromEmail, logIn, markOnboarded } from "./helpers";
 
 // Account flows that create, change and delete a real user and read the emails
 // Supabase sends. They need a LOCAL Supabase (`npx supabase start`), whose mail
@@ -10,7 +10,6 @@ import { logIn } from "./helpers";
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const isLocal = /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(url);
-const MAILBOX = process.env.E2E_MAILBOX_URL ?? "http://127.0.0.1:54324";
 
 test.skip(!isLocal || !serviceKey, "Needs a local Supabase: these tests create and delete users.");
 
@@ -31,27 +30,13 @@ test.beforeAll(async () => {
   });
   if (error || !data.user) throw new Error(`Couldn't create the test user: ${error?.message}`);
   userId = data.user.id;
+  await markOnboarded(admin, [userId]);
 });
 
 test.afterAll(async () => {
   // Already gone if the delete-account test passed; this covers a failed run.
   if (userId) await admin.auth.admin.deleteUser(userId).catch(() => {});
 });
-
-/** Waits for the newest email to `to` in the local test inbox and returns the first link in it. */
-async function linkFromEmail(to: string): Promise<string> {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const search = await fetch(`${MAILBOX}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`).then((r) => r.json());
-    const id = search.messages?.[0]?.ID;
-    if (id) {
-      const message = await fetch(`${MAILBOX}/api/v1/message/${id}`).then((r) => r.json());
-      const link = String(message.HTML ?? message.Text ?? "").match(/https?:\/\/[^\s"'<>]+/)?.[0];
-      if (link) return link.replace(/&amp;/g, "&");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error(`No email with a link arrived for ${to}`);
-}
 
 test("a forgotten password can be reset from the emailed link", async ({ page }) => {
   await page.goto("/forgot-password");

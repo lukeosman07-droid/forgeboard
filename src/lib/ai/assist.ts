@@ -30,7 +30,7 @@ ${description || "(no description)"}
 </description>`,
     maxTokens: 8000,
   });
-  return result.ok ? { ok: true, data: clampPlan(result.data) } : result;
+  return result.ok ? { ok: true, data: clampPlan(result.data), usage: result.usage } : result;
 }
 
 const STATUS_PROMPT = `You are a project manager writing a short weekly status update for stakeholders.

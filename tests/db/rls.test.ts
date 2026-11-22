@@ -541,30 +541,28 @@ describe("profiles", () => {
     expect(data?.full_name).not.toBe("Hijacked");
   });
 
-  it("a paid plan on the profile carries over to the workspace its owner owns", async () => {
+  it("plans live on the workspace now: a profile's old plan columns don't touch it", async () => {
+    const before = await admin.from("workspaces").select("plan").eq("id", y).single();
     await admin.from("profiles").update({ plan: "team", subscription_status: "active" }).eq("id", outsider.id);
-    const { data } = await admin.from("workspaces").select("plan, subscription_status").eq("id", y).single();
-    expect(data).toEqual({ plan: "team", subscription_status: "active" });
+    const after = await admin.from("workspaces").select("plan").eq("id", y).single();
+    expect(after.data?.plan).toBe(before.data?.plan);
   });
 });
 
 describe("AI usage", () => {
-  it("users can't read or write the usage log", async () => {
-    await admin.from("ai_extraction_events").insert({ user_id: owner.id });
+  // More in billing.test.ts.
+  it("only the workspace's owner and admins can read its usage log, and nobody can write it", async () => {
+    await admin.from("ai_usage").insert({ workspace_id: x, user_id: member.id, feature: "extract", status: "succeeded" });
 
-    const read = await owner.client.from("ai_extraction_events").select("id");
-    expect(read.data ?? []).toHaveLength(0);
+    const ownerRead = await owner.client.from("ai_usage").select("id").eq("workspace_id", x);
+    expect((ownerRead.data ?? []).length).toBeGreaterThan(0);
+    for (const user of [member, guest, outsider]) {
+      const read = await user.client.from("ai_usage").select("id").eq("workspace_id", x);
+      expect(read.data ?? []).toHaveLength(0);
+    }
 
-    const write = await owner.client.from("ai_extraction_events").insert({ user_id: owner.id }).select("id");
+    const write = await member.client.from("ai_usage").insert({ workspace_id: x, user_id: member.id, feature: "extract" }).select("id");
     expect(write.error).not.toBeNull();
-  });
-
-  it("users can't call the usage functions themselves", async () => {
-    const claim = await owner.client.rpc("claim_ai_extraction", { p_user_id: owner.id, p_free_limit: 9999, p_hourly_limit: 9999 });
-    expect(claim.error).not.toBeNull();
-
-    const finish = await owner.client.rpc("finish_ai_extraction", { p_event_id: 1, p_status: "failed" });
-    expect(finish.error).not.toBeNull();
   });
 });
 
