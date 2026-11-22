@@ -46,12 +46,14 @@ Billing now belongs to the workspace, every plan limit is enforced by the databa
 - **Activity history limits** (14 / 90 / 365 days) are defined but the activity log is Phase 3.
 - **Email reminders before the trial ends** need a scheduled job; the in-app banner covers it for now.
 - **Old billing columns** on profiles and the old AI usage table stay for one release, unused, so a rollback is possible.
+- **Tests ran in CI, not locally** (they need Docker). On `phase-2` all pass: 89 database tests, 29 browser tests (including the signup-to-sample-project run), 53 unit tests, lint, typecheck and build.
+- **Paid checkout not clicked through by hand.** It needs the new Stripe prices (below).
 
-### Deploying (Claude does this)
+### Deployed (Nov 22, 2026)
 
-1. Save a copy of every table in the live database.
-2. Run the migration on the live database, then merge `phase-2` into `main` and push (Vercel deploys).
-3. Re-seed the demo (Business plan, onboarded) and check the live site.
+1. Saved a copy of every live table (`backups/pre-phase-2-...json`, not committed).
+2. Ran the migration on the live database, then merged `phase-2` into `main` and pushed; Vercel deployed.
+3. Re-seeded the demo (Business plan, onboarded). Checked: all 8 workspaces carried over and count as onboarded, 6 AI usage rows copied, no workspace is read-only (trials end Dec 5), the existing Team subscription is still recognized through its old price, and the new pricing page, checkout redirect, webhook and exports respond on the live site.
 
 ### Still needs Luke
 
