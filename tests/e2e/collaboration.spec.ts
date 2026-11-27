@@ -123,8 +123,13 @@ test("two people on one project see each other's work live", async ({ browser })
   const posted = benPage.getByRole("dialog", { name: "Task details" }).locator("[data-mention]");
   await expect(posted).toHaveText("@Ada Lovelace");
 
+  // The database notified Ada once, as a mention.
+  await expect
+    .poll(async () => (await admin.from("notifications").select("type, in_app, read_at").eq("user_id", ada.id)).data, { timeout: 5_000 })
+    .toEqual([{ type: "mentioned", in_app: true, read_at: null }]);
+
   // Ada's bell lights up, and the Inbox has the mention.
-  await expect(adaPage.getByRole("button", { name: "Notifications, 1 unread" })).toBeVisible({ timeout: 10_000 });
+  await expect(adaPage.getByRole("button", { name: /^Notifications/ })).toHaveAccessibleName("Notifications, 1 unread", { timeout: 10_000 });
   await adaPage.goto(`/w/${slug}/inbox`);
   await expect(adaPage.getByText(`${ben.name} mentioned you`)).toBeVisible();
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { onItemsChanged } from "@/lib/live-events";
 import { createClient } from "@/lib/supabase/client";
 import { listNotifications, markAllNotificationsRead, markNotificationsRead, unreadNotificationCount, type InboxEntry } from "@/server/notifications";
 import { Icon, Popover } from "@/components/work/ui";
@@ -34,21 +35,34 @@ export default function NotificationBell() {
 
   useEffect(() => {
     refreshCount();
-    let supabase: ReturnType<typeof createClient>;
+    const changed = () => {
+      refreshCount();
+      setEntries(null); // reload the list next time it opens
+    };
+    // Backups for the live connection: re-check when tasks on this page change
+    // (comments create most notifications), when the tab comes back into view,
+    // and once a minute.
+    const stopItems = onItemsChanged(changed);
+    const onVisible = () => document.visibilityState === "visible" && refreshCount();
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(() => document.visibilityState === "visible" && refreshCount(), 60_000);
+
+    let supabase: ReturnType<typeof createClient> | null = null;
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null;
     try {
       supabase = createClient();
+      channel = supabase
+        .channel(`notifications:${userId}:${workspaceId}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, changed)
+        .subscribe();
     } catch {
-      return;
+      // Supabase isn't configured (local demo without env vars).
     }
-    const channel = supabase
-      .channel(`notifications:${userId}:${workspaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, () => {
-        refreshCount();
-        setEntries(null); // reload the list next time it opens
-      })
-      .subscribe();
     return () => {
-      void supabase.removeChannel(channel);
+      stopItems();
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+      if (supabase && channel) void supabase.removeChannel(channel);
     };
   }, [refreshCount, userId, workspaceId]);
 
