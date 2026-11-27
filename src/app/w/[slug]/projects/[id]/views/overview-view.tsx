@@ -4,22 +4,26 @@ import Link from "next/link";
 import { useState } from "react";
 import type { StatusReport } from "@/lib/ai/assist-schema";
 import { useWorkspacePath } from "@/components/app/workspace-context";
+import ProjectFeed from "@/components/work/project-feed";
 import { useTaskStore } from "@/components/work/task-store";
 import { Avatar, Icon, StatusPill, statusCounts } from "@/components/work/ui";
 import { formatDate, localToday, useToday } from "@/lib/dates";
-import type { Item, Project, Task } from "@/lib/types";
+import type { Item, Project, Section, Task } from "@/lib/types";
 import { STATUSES, addDays, isOverdue, relativeDue } from "@/lib/work";
 import type { Usage, ViewId } from "../project-workspace";
 
-// Project dashboard: progress, status mix, workload, deadlines, and an AI status report.
+// Project dashboard: progress, status mix, workload, deadlines, an AI status
+// report and recent activity.
 export default function OverviewView({
   project,
+  sections,
   tasks,
   logItems,
   usage,
   onOpenView,
 }: {
   project: Project;
+  sections: Section[];
   tasks: Task[];
   logItems: Item[];
   usage: Usage;
@@ -184,6 +188,10 @@ export default function OverviewView({
           )}
         </Panel>
       </div>
+
+      <Panel title="Recent activity">
+        <ProjectFeed projectId={project.id} sections={sections} version={tasks} />
+      </Panel>
     </div>
   );
 }

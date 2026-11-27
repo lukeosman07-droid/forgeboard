@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import CommandPalette from "@/components/app/command-palette";
+import NotificationBell from "@/components/app/notification-bell";
 import SidebarFrame, { MainNav, MainNavLinks } from "@/components/app/sidebar";
 import SidebarProjects, { SidebarProjectsFallback } from "@/components/app/sidebar-projects";
 import UserCard from "@/components/app/user-card";
@@ -49,7 +50,10 @@ export default function AppShell({
       topbar={
         <>
           <CommandPalette />
-          <PlanBadge slug={workspace.slug} plan={plan} />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <PlanBadge slug={workspace.slug} plan={plan} />
+          </div>
         </>
       }
     >

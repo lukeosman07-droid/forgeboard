@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { searchWorkspace, type SearchResults } from "@/server/search";
+import { searchWorkspace, type SearchMatch, type SearchResults } from "@/server/search";
 import { Icon, StatusPill } from "@/components/work/ui";
 import { colorOf } from "@/lib/work";
 import { useWorkspace, useWorkspacePath } from "./workspace-context";
 
-// Ctrl/⌘ + K search across projects and tasks, plus quick navigation.
+// Ctrl/⌘ + K search across projects, tasks, comments and meeting notes, plus
+// quick navigation.
 
 type Result = { key: string; label: React.ReactNode; hint?: React.ReactNode; href: string };
 
@@ -15,6 +16,7 @@ type Result = { key: string; label: React.ReactNode; hint?: React.ReactNode; hre
 const PAGES = [
   { key: "home", label: "Home", path: "" },
   { key: "my-work", label: "My work", path: "/my-work" },
+  { key: "inbox", label: "Inbox", path: "/inbox" },
   { key: "members", label: "Members", path: "/members" },
   { key: "billing", label: "Billing", path: "/billing" },
   { key: "settings", label: "Settings", path: "/settings" },
@@ -26,7 +28,7 @@ export default function CommandPalette() {
   const path = useWorkspacePath();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResults>({ projects: [], tasks: [] });
+  const [results, setResults] = useState<SearchResults>({ projects: [], matches: [] });
   const [active, setActive] = useState(0);
   const isMac = useSyncExternalStore(
     () => () => {},
@@ -79,16 +81,16 @@ export default function CommandPalette() {
       hint: "Project",
       href: path(`/projects/${p.id}`),
     })),
-    ...results.tasks.map((t) => ({
-      key: `t-${t.id}`,
-      label: t.title,
+    ...results.matches.map((m) => ({
+      key: `${m.kind}-${m.id}`,
+      label: <MatchLabel match={m} />,
       hint: (
         <span className="flex items-center gap-2">
-          <span className="max-w-32 truncate">{t.project_name}</span>
-          <StatusPill status={t.status} className="!py-0.5" />
+          <span className="max-w-32 truncate">{m.project_name}</span>
+          {m.kind === "note" ? "Notes" : m.item_type === "action_item" && m.status ? <StatusPill status={m.status} className="!py-0.5" /> : "Log"}
         </span>
       ),
-      href: path(`/projects/${t.project_id}?view=table&task=${t.id}`),
+      href: path(matchPath(m)),
     })),
   ];
 
@@ -106,7 +108,7 @@ export default function CommandPalette() {
         className="flex w-full max-w-md items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-1.5 text-sm text-slate-400 hover:border-white/20 hover:text-slate-200"
       >
         <Icon name="search" />
-        <span className="flex-1 text-left">Search projects and tasks</span>
+        <span className="flex-1 text-left">Search</span>
         <kbd className="hidden rounded border border-white/10 px-1.5 text-[11px] text-slate-500 sm:inline">{isMac ? "⌘" : "Ctrl"} K</kbd>
       </button>
 
@@ -137,7 +139,7 @@ export default function CommandPalette() {
                 go(items[active]);
               }
             }}
-            placeholder="Search projects and tasks…"
+            placeholder="Search tasks, comments and notes…"
             aria-label="Search"
             className="h-14 flex-1 bg-transparent text-base text-white placeholder:text-slate-500 focus:outline-none"
           />
@@ -163,5 +165,38 @@ export default function CommandPalette() {
         </ul>
       </dialog>
     </>
+  );
+}
+
+function matchPath(m: SearchMatch) {
+  if (m.kind === "note") return `/projects/${m.project_id}?view=notes`;
+  if (m.item_type !== "action_item") return `/projects/${m.project_id}?view=log`;
+  return `/projects/${m.project_id}?view=table&task=${m.item_id}`;
+}
+
+/** The title, plus the matching words in context for comments and notes. */
+function MatchLabel({ match }: { match: SearchMatch }) {
+  // A task found by its title alone has no highlighted words in its details.
+  const showSnippet = !!match.snippet && (match.kind !== "task" || match.snippet.includes("«"));
+  return (
+    <span className="block min-w-0">
+      <span className="flex items-center gap-1.5 truncate">
+        {match.kind === "comment" && <span className="shrink-0 text-xs text-slate-500">Comment on</span>}
+        <span className="truncate">{match.title}</span>
+      </span>
+      {showSnippet && (
+        <span className="block truncate text-xs text-slate-500">
+          {match.snippet!.split(/(«[^»]*»)/).map((part, i) =>
+            part.startsWith("«") ? (
+              <mark key={i} className="rounded bg-orange-500/20 px-0.5 text-orange-200">
+                {part.slice(1, -1)}
+              </mark>
+            ) : (
+              part
+            ),
+          )}
+        </span>
+      )}
+    </span>
   );
 }

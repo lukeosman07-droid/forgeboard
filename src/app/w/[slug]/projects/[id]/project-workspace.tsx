@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { deleteProject, updateProject } from "@/server/projects";
 import { useWorkspace } from "@/components/app/workspace-context";
+import ProjectLive from "@/components/work/project-live";
 import TaskStore, { useTaskStore } from "@/components/work/task-store";
 import { Icon, MenuItem, Popover, type IconName } from "@/components/work/ui";
 import type { Item, Note, Project, Section, Task } from "@/lib/types";
@@ -173,7 +174,7 @@ function Workspace({
 
       <div role="tabpanel">
         {view === "overview" && (
-          <OverviewView project={project} tasks={tasks} logItems={logItems} usage={usage} onOpenView={switchView} />
+          <OverviewView project={project} sections={sections} tasks={tasks} logItems={logItems} usage={usage} onOpenView={switchView} />
         )}
         {view === "table" && <TableView project={project} sections={sections} tasks={visible} filtering={filtering} />}
         {view === "board" && <BoardView project={project} sections={sections} tasks={visible} />}
@@ -258,6 +259,7 @@ function ProjectHeader({ project, taskCount, sharedWith }: { project: Project; t
           />
           {project.description && <p className="mt-0.5 max-w-3xl text-sm text-slate-400">{project.description}</p>}
         </div>
+        <ProjectLive projectId={project.id} />
         <ShareDialog projectId={project.id} projectName={project.name} sharedWith={sharedWith} managerId={project.manager_id} />
         {canEdit && <Popover
           align="right"

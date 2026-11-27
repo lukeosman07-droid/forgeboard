@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePeople, useWorkspace, useWorkspacePath } from "@/components/app/workspace-context";
 import { displayName } from "@/lib/people";
-import { addComment, deleteComment } from "@/server/comments";
+import { onItemsChanged } from "@/lib/live-events";
+import { toEditable, toStored } from "@/lib/mentions";
+import { addComment, deleteComment, editComment } from "@/server/comments";
 import type { TaskPatch } from "@/server/schemas";
 import { addSubtask, deleteSubtask, getTaskDetail, updateSubtask, type TaskDetail } from "@/server/tasks";
 import { useToday } from "@/lib/dates";
-import type { ItemComment, Subtask, Task } from "@/lib/types";
+import type { Activity, ItemComment, Subtask, Task } from "@/lib/types";
 import { colorOf, isOverdue } from "@/lib/work";
+import ActivityList from "./activity-list";
 import AssigneePicker from "./assignee-picker";
+import Markdown from "./markdown";
+import MentionInput, { type MentionDraft } from "./mention-input";
 import { Avatar, DateField, Icon, PriorityPicker, ProgressBar, StatusPicker } from "./ui";
 
 // Right-side panel with everything about one task: fields, description,
-// subtasks and an updates feed.
+// subtasks, an updates feed and the task's history. While it's open, changes
+// made by other people (announced by the project's realtime listener) reload it.
 export default function TaskDrawer({
   taskId,
   task: listTask,
@@ -34,23 +40,40 @@ export default function TaskDrawer({
   const [detail, setDetail] = useState<TaskDetail | "missing" | null>(null);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState<ItemComment[]>([]);
+  const [activity, setActivity] = useState<Activity[]>([]);
   const [localPatch, setLocalPatch] = useState<Partial<Task>>({});
   const [error, setError] = useState<string>();
 
+  const load = useCallback(
+    (isCurrent: () => boolean) =>
+      getTaskDetail(taskId).then((d) => {
+        if (!isCurrent()) return;
+        setDetail(d ?? "missing");
+        if (d) {
+          setSubtasks(d.subtasks);
+          setComments(d.comments);
+          setActivity(d.activity);
+        }
+      }),
+    [taskId],
+  );
+
   useEffect(() => {
     let alive = true;
-    getTaskDetail(taskId).then((d) => {
-      if (!alive) return;
-      setDetail(d ?? "missing");
-      if (d) {
-        setSubtasks(d.subtasks);
-        setComments(d.comments);
-      }
+    void load(() => alive);
+    // Reload when this task changes, here or in someone else's browser.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = onItemsChanged((ids) => {
+      if (!ids.includes(taskId)) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => void load(() => alive), 250);
     });
     return () => {
       alive = false;
+      clearTimeout(timer);
+      stop();
     };
-  }, [taskId]);
+  }, [taskId, load]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -231,7 +254,19 @@ export default function TaskDrawer({
                 loading={!loaded}
                 run={run}
                 canDelete={(c) => isAdmin || c.created_by === userId}
+                canEditComment={(c) => c.created_by === userId}
               />
+
+              <section>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">History</h3>
+                <div className="mt-3">
+                  {loaded ? (
+                    <ActivityList entries={activity} sections={loaded.sections} empty="No changes recorded yet." />
+                  ) : (
+                    <div className="h-12 animate-pulse rounded bg-white/5" />
+                  )}
+                </div>
+              </section>
             </div>
           </div>
         )}
@@ -371,6 +406,7 @@ function Updates({
   loading,
   run,
   canDelete,
+  canEditComment,
 }: {
   comments: ItemComment[];
   setComments: React.Dispatch<React.SetStateAction<ItemComment[]>>;
@@ -379,20 +415,34 @@ function Updates({
   run: (p: Promise<{ error?: string }>) => Promise<void>;
   /** Your own updates, or any update if you're an admin (the database checks the same). */
   canDelete: (comment: ItemComment) => boolean;
+  /** Only the author edits a comment. */
+  canEditComment: (comment: ItemComment) => boolean;
 }) {
   const { byId } = usePeople();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState<MentionDraft>({ text: "", mentions: [] });
   const [posting, setPosting] = useState(false);
+  const [editing, setEditing] = useState<{ id: string; draft: MentionDraft } | null>(null);
 
   const post = async () => {
-    const body = draft.trim();
+    const body = toStored(draft.text.trim(), draft.mentions);
     if (!body) return;
     setPosting(true);
     const result = await addComment(taskId, body);
     setPosting(false);
     if (result.comment) {
       setComments((list) => [...list, result.comment!]);
-      setDraft("");
+      setDraft({ text: "", mentions: [] });
+    } else await run(Promise.resolve(result));
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const body = toStored(editing.draft.text.trim(), editing.draft.mentions);
+    if (!body) return;
+    const result = await editComment(editing.id, body);
+    if (result.comment) {
+      setComments((list) => list.map((c) => (c.id === result.comment!.id ? result.comment! : c)));
+      setEditing(null);
     } else await run(Promise.resolve(result));
   };
 
@@ -400,24 +450,13 @@ function Updates({
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Updates</h3>
       <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/40 focus-within:border-orange-500/60">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) post();
-          }}
-          placeholder="Write an update…"
-          aria-label="Write an update"
-          maxLength={5000}
-          rows={2}
-          className="block w-full resize-none bg-transparent px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none"
-        />
-        <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5">
-          <span className="text-[11px] text-slate-500">Ctrl + Enter to post</span>
+        <MentionInput value={draft} onChange={setDraft} onSubmit={post} placeholder="Write an update… type @ to mention someone" label="Write an update" />
+        <div className="flex items-center justify-between gap-2 border-t border-white/5 px-3 py-1.5">
+          <span className="text-[11px] text-slate-500">**bold**, *italic*, `code`, - lists · Ctrl + Enter to post</span>
           <button
             type="button"
             onClick={post}
-            disabled={!draft.trim() || posting}
+            disabled={!draft.text.trim() || posting}
             className="rounded-md bg-orange-500 px-3 py-1 text-xs font-semibold text-slate-950 hover:bg-orange-400 disabled:opacity-40"
           >
             {posting ? "Posting…" : "Post"}
@@ -440,7 +479,18 @@ function Updates({
                   <Avatar name={name} />
                   <span className="truncate font-medium text-slate-300">{name}</span>
                   <span>{new Date(c.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                  {c.edited_at && <span title={`Edited ${new Date(c.edited_at).toLocaleString()}`}>(edited)</span>}
                 </span>
+                <span className="flex items-center gap-3">
+                {canEditComment(c) && editing?.id !== c.id && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing({ id: c.id, draft: toEditable(c.body) })}
+                    className="opacity-0 hover:text-white group-hover:opacity-100 focus:opacity-100"
+                  >
+                    Edit
+                  </button>
+                )}
                 {canDelete(c) && (
                   <button
                     type="button"
@@ -453,8 +503,34 @@ function Updates({
                     Delete
                   </button>
                 )}
+                </span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-200">{c.body}</p>
+              {editing?.id === c.id ? (
+                <div className="mt-2 rounded-lg border border-white/10 bg-slate-950/40 focus-within:border-orange-500/60">
+                  <MentionInput
+                    value={editing.draft}
+                    onChange={(d) => setEditing({ id: c.id, draft: d })}
+                    onSubmit={saveEdit}
+                    label="Edit update"
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-2 border-t border-white/5 px-3 py-1.5">
+                    <button type="button" onClick={() => setEditing(null)} className="rounded-md px-2 py-1 text-xs text-slate-400 hover:text-white">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveEdit}
+                      disabled={!editing.draft.text.trim()}
+                      className="rounded-md bg-orange-500 px-3 py-1 text-xs font-semibold text-slate-950 hover:bg-orange-400 disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Markdown source={c.body} className="mt-1" />
+              )}
             </li>
             );
           })}

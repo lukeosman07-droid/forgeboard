@@ -75,6 +75,7 @@ export default function SidebarFrame({
 const NAV: { path: string; label: string; icon: IconName; exact?: boolean }[] = [
   { path: "", label: "Home", icon: "home", exact: true },
   { path: "/my-work", label: "My work", icon: "check" },
+  { path: "/inbox", label: "Inbox", icon: "inbox" },
   { path: "/members", label: "Members", icon: "users" },
   { path: "/billing", label: "Billing", icon: "card" },
   { path: "/settings", label: "Settings", icon: "settings" },

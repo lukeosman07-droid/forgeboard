@@ -5,7 +5,10 @@ import { isDemoAccount } from "@/lib/account";
 import { getCurrentUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
+import { emailIsConfigured } from "@/lib/email";
 import { getWorkspace } from "@/lib/workspaces";
+import { getNotificationPrefs } from "@/server/notifications";
+import NotificationForm from "./notification-form";
 import { DeleteAccountForm, DeleteWorkspaceForm, EmailForm, PasswordForm, ProfileForm } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings – Forgeboard" };
@@ -19,7 +22,7 @@ export default function SettingsPage({ params, searchParams }: PageProps<"/w/[sl
     <div className="mx-auto max-w-3xl space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-white">Settings</h1>
-        <p className="mt-1 text-slate-400">Your profile, login details, workspace data and account.</p>
+        <p className="mt-1 text-slate-400">Your profile, login details, notifications, workspace data and account.</p>
       </div>
       <Suspense fallback={<div className="h-96 animate-pulse rounded-2xl border border-white/10 bg-slate-900/60" />}>
         <SettingsContent params={params} searchParams={searchParams} />
@@ -34,9 +37,10 @@ async function SettingsContent({ params, searchParams }: PageProps<"/w/[slug]/se
   const supabase = await createClient();
   if (!user || !supabase) redirect("/login?next=/dashboard/settings");
 
-  const [{ data: profile }, access] = await Promise.all([
+  const [{ data: profile }, access, notificationPrefs] = await Promise.all([
     supabase.from("profiles").select("full_name, company_name").eq("id", user.id).maybeSingle<Pick<Profile, "full_name" | "company_name">>(),
     getWorkspace(slug),
+    getNotificationPrefs(slug),
   ]);
   const workspace = access?.workspace;
   const isOwner = access?.role === "owner";
@@ -70,6 +74,12 @@ async function SettingsContent({ params, searchParams }: PageProps<"/w/[slug]/se
         <PasswordForm locked={demo} />
       </Card>
 
+      {workspace && notificationPrefs && (
+        <Card id="notifications" title="Notifications" text={`What you hear about in ${workspace.name}, in the app and by email.`}>
+          <NotificationForm slug={workspace.slug} initial={notificationPrefs.prefs} timeZone={notificationPrefs.timeZone} emailOn={emailIsConfigured()} />
+        </Card>
+      )}
+
       {workspace && access?.isAdmin && (
         <Card title="Export data" text="Download your data at any time, including while the workspace is read-only.">
           <div className="flex flex-wrap items-center gap-3">
@@ -98,9 +108,9 @@ async function SettingsContent({ params, searchParams }: PageProps<"/w/[slug]/se
   );
 }
 
-function Card({ title, text, danger = false, children }: { title: string; text: string; danger?: boolean; children: React.ReactNode }) {
+function Card({ id, title, text, danger = false, children }: { id?: string; title: string; text: string; danger?: boolean; children: React.ReactNode }) {
   return (
-    <section className={`rounded-2xl border bg-slate-900/60 p-6 ${danger ? "border-red-500/25" : "border-white/10"}`}>
+    <section id={id} className={`rounded-2xl border bg-slate-900/60 p-6 ${danger ? "border-red-500/25" : "border-white/10"}`}>
       <h2 className="text-lg font-semibold text-white">{title}</h2>
       <p className="mt-1 text-sm text-slate-400">{text}</p>
       <div className="mt-5">{children}</div>

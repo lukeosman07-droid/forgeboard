@@ -148,7 +148,65 @@ export type ItemComment = {
   created_by: string | null;
   body: string;
   created_at: string;
+  /** Set when the author edits it. */
+  edited_at: string | null;
 };
 
 /** A task plus counts shown on cards and rows. */
 export type Task = Item & { subtask_total: number; subtask_done: number; comment_count: number };
+
+/** One line of a task's or project's history. Written by database triggers. */
+export type Activity = {
+  id: number;
+  workspace_id: string;
+  project_id: string;
+  item_id: string | null;
+  comment_id: string | null;
+  actor_id: string | null;
+  verb: "created" | "updated" | "deleted" | "commented" | "comment_edited" | "comment_deleted";
+  item_title: string | null;
+  changes: Record<string, { old: unknown; new: unknown }> | null;
+  created_at: string;
+};
+
+export type NotificationType = "assigned" | "mentioned" | "commented" | "status";
+
+export type AppNotification = {
+  id: number;
+  workspace_id: string;
+  project_id: string | null;
+  item_id: string | null;
+  comment_id: string | null;
+  actor_id: string | null;
+  type: NotificationType;
+  data: { status?: string; old_status?: string };
+  read_at: string | null;
+  created_at: string;
+};
+
+export type NotificationPrefs = {
+  in_app_assigned: boolean;
+  in_app_mentioned: boolean;
+  in_app_commented: boolean;
+  in_app_status: boolean;
+  email_assigned: boolean;
+  email_mentioned: boolean;
+  email_commented: boolean;
+  email_status: boolean;
+  email_digest: boolean;
+  digest_hour: number;
+};
+
+/** Matches the database defaults used when someone has never saved preferences. */
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  in_app_assigned: true,
+  in_app_mentioned: true,
+  in_app_commented: true,
+  in_app_status: true,
+  email_assigned: true,
+  email_mentioned: true,
+  email_commented: false,
+  email_status: false,
+  email_digest: true,
+  digest_hour: 8,
+};

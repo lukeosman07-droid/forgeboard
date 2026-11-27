@@ -1,9 +1,10 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { displayName, matchPerson, withCurrentNames } from "@/lib/people";
-import type { ItemComment, Project, Section, Subtask, Task } from "@/lib/types";
+import type { Activity, ItemComment, Project, Section, Subtask, Task } from "@/lib/types";
 import { TASK_SELECT, toTask } from "@/lib/work";
 import {
   Id,
@@ -18,6 +19,7 @@ import {
   type SaveExtractionInput,
   type TaskPatch,
 } from "./schemas";
+import { deliverQuietly } from "./deliver";
 import { NO_ACCESS, isDenied, peopleIn, refused, session } from "./session";
 
 // Sections, tasks, the decisions/risks/questions log, subtasks, and saving AI
@@ -136,6 +138,7 @@ export async function createTask(projectId: string, input: TaskPatch & { title: 
   if (error || !data) return { error: isDenied(error) ? NO_ACCESS : "Couldn't add the task. Please try again." };
 
   refresh();
+  after(deliverQuietly);
   return { ok: true, id: data.id };
 }
 
@@ -179,6 +182,7 @@ export async function updateTask(itemId: string, patch: TaskPatch): Promise<Acti
   }
 
   refresh();
+  after(deliverQuietly);
   return { ok: true };
 }
 
@@ -233,6 +237,8 @@ export type TaskDetail = {
   sections: Pick<Section, "id" | "name">[];
   subtasks: Subtask[];
   comments: ItemComment[];
+  /** Newest first. Older entries drop off with the plan's history window. */
+  activity: Activity[];
 };
 
 export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> {
@@ -243,11 +249,12 @@ export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> 
   if (!row) return null;
   const raw = toTask(row);
 
-  const [project, sections, subtasks, comments, people] = await Promise.all([
+  const [project, sections, subtasks, comments, activity, people] = await Promise.all([
     supabase.from("projects").select("id, name, color").eq("id", raw.project_id).maybeSingle<TaskDetail["project"]>(),
     supabase.from("sections").select("id, name").eq("project_id", raw.project_id).order("position"),
     supabase.from("subtasks").select("*").eq("item_id", itemId).order("position").order("created_at"),
     supabase.from("item_comments").select("*").eq("item_id", itemId).order("created_at"),
+    supabase.from("activity").select("*").eq("item_id", itemId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     peopleIn(supabase, raw.workspace_id),
   ]);
   if (!project.data) return null;
@@ -258,7 +265,20 @@ export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> 
     sections: (sections.data ?? []) as TaskDetail["sections"],
     subtasks: (subtasks.data ?? []) as Subtask[],
     comments: (comments.data ?? []) as ItemComment[],
+    activity: (activity.data ?? []) as Activity[],
   };
+}
+
+/** The latest changes across one project, newest first. */
+export async function getProjectActivity(projectId: string, before?: number): Promise<Activity[]> {
+  if (!Id.safeParse(projectId).success) return [];
+  const cursor = z.number().int().positive().optional().safeParse(before);
+  if (!cursor.success) return [];
+  const { supabase } = await session();
+  let query = supabase.from("activity").select("*").eq("project_id", projectId);
+  if (cursor.data) query = query.lt("id", cursor.data);
+  const { data } = await query.order("id", { ascending: false }).limit(30);
+  return (data ?? []) as Activity[];
 }
 
 export async function addSubtask(itemId: string, title: string): Promise<ActionResult & { subtask?: Subtask }> {
@@ -355,5 +375,6 @@ export async function saveExtraction(input: SaveExtractionInput): Promise<Action
   }
 
   refresh();
+  after(deliverQuietly);
   return { ok: true };
 }

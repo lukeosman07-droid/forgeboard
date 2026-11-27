@@ -2,6 +2,90 @@
 
 One entry per phase of [SPEC.md](SPEC.md): what shipped, what was skipped and why, and what still needs Luke.
 
+## Phase 3: Collaboration (Nov 27, 2026)
+
+People working on the same project now see each other's changes live, can talk in comments with @mentions, get notified in the app and by email, and can see the history of every task. Search covers tasks, comments and meeting notes.
+
+### Shipped
+
+**Database** (`supabase/migrations/20261128000000_collaboration.sql`)
+
+- `activity`: database triggers record every task created, changed or deleted, and every comment posted, edited or deleted. Each row says who did it, when, and for changes, each field's old and new value (name, description, status, priority, owner, start and due dates, section, type). Moving a task without changing anything else isn't recorded. Nobody can write history directly. People see the history of projects they can see, going back as far as the plan allows: 14 days on a trial, 90 on Starter, 365 on Team, all of it on Business and Enterprise.
+- Comments can be edited by their author. Only the text can change, and editing sets `edited_at`. Mentions are stored as `@[Name](user-id)`, so renaming someone never breaks a mention.
+- `notifications`, created by triggers:
+  - Assigned: someone makes you a task's owner.
+  - Mentioned: once per person per comment. Editing a comment only notifies people newly added to it.
+  - Commented: someone comments on a task you own. You aren't told twice if you were also mentioned.
+  - Status: someone else moves a task you own.
+  - You're never notified about your own actions, and never about a project you can't see. A guest only hears about projects shared with them.
+  - You see only your own notifications, and can only mark them read.
+- `notification_prefs`, per person per workspace. Each type can be on or off in the app and by email. Defaults: everything on in the app; email on for assigned and mentioned, off for comments and status changes; daily digest on at 8 AM in your time zone.
+- Email queue. Each notification that should email someone is marked pending. `claim_notification_emails()` hands each one out exactly once, even if two senders run at the same time, and a send that crashed is retried after 15 minutes.
+- Daily jobs, callable only by the server:
+  - `due_digest_candidates()`: each person's open tasks that are overdue or due today or tomorrow, in their time zone, at most one digest a day.
+  - `trial_ending_candidates()`: trials ending within 3 days, warned once.
+- Full-text search: `search` columns with GIN indexes on tasks (name, description, owner), comments (with mentions read as names) and notes. `search_workspace()` matches every word as a prefix ("pie" finds "pier"), runs as the caller so Row Level Security still applies, and returns highlighted snippets.
+- Realtime: tasks, sections, subtasks, comments and notifications are published to Supabase Realtime. Row Level Security decides who receives each change.
+- Deleting an account still works when it has history: its past actions stay, showing as "Former member".
+
+**App**
+
+- **Live projects.** A project page listens for changes to its tasks, sections, subtasks and comments. When anything changes it refreshes, usually in under a second, and an open task panel reloads. Avatars in the project header show who else is looking at it.
+- **Task panel.**
+  - A History section lists who changed what and when, for example "Ben Builder changed the due date from Dec 1 to Dec 5 · 3m ago".
+  - Updates support Markdown: bold, italic, code, links and lists. It's rendered as React elements, never as raw HTML, and only http, https and mailto links are allowed.
+  - Typing `@` suggests people from the workspace.
+  - Authors can edit their updates, and edited ones show "(edited)".
+- **Project feed.** The Overview tab shows the project's recent activity, linked to each task.
+- **Notifications.** A bell in the top bar shows the unread count, which stays live, and the latest notifications, with "Mark all read". The new Inbox page (`/w/<slug>/inbox`, also in the sidebar) lists all notifications, can show unread only, marks single notifications or all of them read, and pages back through older ones.
+- **Settings → Notifications.** For each type, choose in-app and email. Also choose the daily digest, its hour and your time zone.
+- **Search.** The command palette (Ctrl/⌘ K) searches tasks, comments and meeting notes with the new full-text search. Matches are highlighted, and comment hits open their task. Projects are still matched by name.
+- **Emails** (Resend):
+  - One email per notification (assigned, mentioned, and, if turned on, comments and status changes), with the comment quoted and a link to the task.
+  - The daily due-date digest.
+  - The trial-ending warning, 3 days before.
+  - The payment-failed email from Phase 2 is unchanged.
+  - Notification emails go out right after the action that caused them. Anything missed goes out with the daily job.
+- **Daily job.** `/api/cron/daily` sends queued emails, digests and trial warnings. It only runs when called with `Authorization: Bearer $CRON_SECRET`, and `vercel.json` schedules it every day at 13:00 UTC. New env var: `CRON_SECRET` (in `.env.example`).
+
+**Tests**
+
+- New `tests/db/collaboration.test.ts`:
+  - History records who changed the due date, with the old and new dates, and skips moves.
+  - Guests and outsiders see only the history they should.
+  - Assignment notifies once.
+  - A mention creates one notification and one queued email, and respects preferences. Guests aren't told about projects they can't see.
+  - People read only their own notifications.
+  - Queued emails are handed out once.
+  - Only the author edits a comment.
+  - Search finds a task by a word in a comment, and respects access.
+- New `tests/e2e/collaboration.spec.ts`, with two people in two browsers on one project:
+  - Each sees the other online.
+  - A rename shows up in the other browser within 2 seconds.
+  - The open task panel shows who moved the due date.
+  - An @mention picked from the suggestions lights up the bell and the Inbox.
+  - Search finds the task by a word only in the comment.
+- Unit tests for mentions, the Markdown parser (including unsafe links and HTML), history wording and notification wording.
+
+### Skipped or deferred
+
+- **Email isn't sending yet.** `RESEND_API_KEY` isn't set in Vercel, so notifications show in the app only, and queued emails are marked skipped rather than piling up. Settings says so.
+- **Digest timing.** Vercel's Hobby plan runs scheduled jobs at most once a day, so everyone's digest goes out on that one daily run (13:00 UTC: 8 AM Eastern, 5 AM Pacific) instead of at the hour each person chose. On a paid Vercel plan, schedule `/api/cron/daily?hourly=1` every hour and the chosen hour is respected.
+- **Typing indicators and live cursors** weren't in the spec and aren't built. Presence shows who is on the project.
+
+### Still needs Luke
+
+1. **`CRON_SECRET` in Vercel.** Vercel → forgeboard → Settings → Environment Variables → add `CRON_SECRET` (Production) with a long random value, for example from `openssl rand -hex 32`, then redeploy. Until then the daily job is refused, so no digests or trial warnings are sent. In-app notifications work regardless.
+2. **Email (optional).** To send notification emails, digests and trial warnings, add `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in Resend) in Vercel.
+
+### Decisions for Luke
+
+- Email defaults: assigned and mentioned email on; comments on your tasks and status changes are in the app only (they'd be noisy by email). Each person can change this.
+- The daily job runs at 13:00 UTC, because the Hobby plan allows one run a day.
+- History older than the plan's window is hidden, not deleted, so upgrading shows it again.
+- Mentions can name anyone in the workspace. Someone who can't see the project isn't notified.
+- Authors can edit their own comments. Admins can delete anyone's but can't edit them.
+
 ## Phase 2: Billing, plans and onboarding (Nov 22, 2026)
 
 Billing now belongs to the workspace, every plan limit is enforced by the database, and a new signup gets a guided start with a filled-in sample project.
