@@ -82,8 +82,18 @@ test("two people on one project see each other's work live", async ({ browser })
 
   // 1. Ada renames the task; Ben's table shows it within 2 seconds of the save.
   await adaPage.goto(`/w/${slug}/projects/${projectId}?view=table&task=${taskId}`);
-  const title = adaPage.getByRole("dialog", { name: "Task details" }).getByLabel("Task name");
-  await title.fill("Inspect bearings and grout");
+  const panel = adaPage.getByRole("dialog", { name: "Task details" });
+  const history = panel.getByRole("list", { name: "History" });
+  // Wait until the panel has loaded (and the page is interactive) before typing,
+  // and until Ada's live connection is back after the reload.
+  await expect(history.getByText("created this")).toBeVisible({ timeout: 15_000 });
+  await expect(adaPage.getByLabel(`Also viewing: ${ben.name}`)).toBeVisible({ timeout: 20_000 });
+  const title = panel.getByLabel("Task name");
+  await expect(title).toHaveValue("Inspect bearings");
+  await title.click();
+  await title.press("Control+a");
+  await title.pressSequentially("Inspect bearings and grout");
+  await expect(title).toHaveValue("Inspect bearings and grout");
   await title.press("Enter");
   await expect
     .poll(async () => (await admin.from("items").select("title").eq("id", taskId).single()).data?.title, { timeout: 10_000, intervals: [50] })
@@ -98,8 +108,6 @@ test("two people on one project see each other's work live", async ({ browser })
   await benDb.auth.signInWithPassword({ email: ben.email, password: PASSWORD });
   const moved = await benDb.from("items").update({ due_date: "2026-12-05" }).eq("id", taskId);
   expect(moved.error).toBeNull();
-  const panel = adaPage.getByRole("dialog", { name: "Task details" });
-  const history = panel.getByRole("list", { name: "History" });
   await expect(history.getByText(/changed the due date from Dec 1 to Dec 5/)).toBeVisible({ timeout: 5_000 });
   await expect(history.getByRole("listitem").filter({ hasText: "changed the due date" })).toContainText(ben.name);
 
