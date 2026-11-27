@@ -57,8 +57,8 @@ Billing now belongs to the workspace, every plan limit is enforced by the databa
 
 ### Still needs Luke
 
-1. **Stripe test prices (6).** In Stripe (test mode) → Product catalog, create three products with two recurring prices each: Starter $79/month and $790/year, Team $199/month and $1,990/year, Business $499/month and $4,990/year. Send Claude the six `price_...` IDs, or add them in Vercel as `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_ANNUAL`, `STRIPE_PRICE_TEAM_MONTHLY`, `STRIPE_PRICE_TEAM_ANNUAL`, `STRIPE_PRICE_BUSINESS_MONTHLY`, `STRIPE_PRICE_BUSINESS_ANNUAL`, then redeploy. Until then, choosing a plan without a price returns to the pricing page and nothing is charged. Keep the old `STRIPE_PRICE_TEAM` / `STRIPE_PRICE_BUSINESS` while any subscription uses them.
-2. **Webhook events.** Stripe → Developers → Webhooks → the Forgeboard endpoint → add `customer.subscription.created`, `invoice.payment_failed` and `invoice.paid` to the events it sends.
+1. ~~Stripe test prices and webhook events~~ Done Nov 27 by Claude: Starter, Team and Business monthly and yearly test prices created (the old $299/$799 prices stay active for the existing subscription), their IDs set in Vercel as `STRIPE_PRICE_*_MONTHLY/ANNUAL`, and the webhook now also sends `customer.subscription.created`, `invoice.payment_failed` and `invoice.paid`.
+2. **Live mode, later.** Before taking real payments, repeat this in Stripe live mode and swap the live key, webhook secret and price IDs into Vercel.
 3. **Billing portal (optional).** Stripe → Settings → Billing → Customer portal: allow plan switching between the six prices if you want customers to change plans there as well as in the app.
 4. **Sales tax (optional).** Turn on Stripe Tax, then set `STRIPE_AUTOMATIC_TAX=true` in Vercel.
 
