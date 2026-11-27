@@ -29,7 +29,7 @@ export function workspaceBase(page: Page) {
   return match[0];
 }
 
-const MAILBOX = process.env.E2E_MAILBOX_URL ?? "http://127.0.0.1:54324";
+const MAILBOX = process.env.E2E_MAILBOX_URL ?? "http://127.0.0.1:54334";
 
 /** Waits for the newest email to `to` in the local test inbox and returns the first link in it. */
 export async function linkFromEmail(to: string): Promise<string> {
