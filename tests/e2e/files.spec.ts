@@ -52,9 +52,14 @@ test.afterAll(async () => {
 
 async function openInbox(page: Page) {
   await page.goto(`/w/${slug}/projects/${projectId}?view=notes`);
-  const tabs = page.getByRole("tablist", { name: "Capture from" });
-  if (!(await tabs.isVisible())) await page.getByRole("button", { name: /AI Capture/ }).click();
-  await tabs.getByRole("tab", { name: "Project inbox" }).click();
+  const toggle = page.getByRole("button", { name: /AI Capture/ });
+  const tab = page.getByRole("tablist", { name: "Capture from" }).getByRole("tab", { name: "Project inbox" });
+  // Retry until the page is interactive: clicks before hydration do nothing.
+  await expect(async () => {
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    await tab.click({ timeout: 2_000 });
+    await expect(tab).toHaveAttribute("aria-selected", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 test("a forwarded email shows up in the project inbox within a minute", async ({ page, request }) => {
@@ -88,8 +93,10 @@ test("an upload past the storage quota is refused with a clear message", async (
   await admin.from("workspaces").update({ storage_bytes_used: 1024 ** 3 - 1024 }).eq("id", workspaceId);
   try {
     await page.goto(`/w/${slug}/projects/${projectId}?task=${taskId}`);
+    // The History list loads after the panel is interactive.
+    await expect(page.getByRole("dialog", { name: "Task details" }).getByRole("list", { name: "History" })).toBeVisible({ timeout: 15_000 });
     await page.getByLabel("Attach files").setInputFiles({ name: "survey.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(4096, 32) });
-    await expect(page.getByRole("alert")).toContainText("This file would go over your plan's 1 GB of storage");
+    await expect(page.getByRole("alert").filter({ hasText: "storage" })).toContainText("This file would go over your plan's 1 GB of storage");
     await expect(page.getByRole("list", { name: "Files" })).toHaveCount(0);
   } finally {
     await admin.from("workspaces").update({ storage_bytes_used: 0 }).eq("id", workspaceId);
