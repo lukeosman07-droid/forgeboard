@@ -69,14 +69,24 @@ People working on the same project now see each other's changes live, can talk i
 
 ### Skipped or deferred
 
-- **Email isn't sending yet.** `RESEND_API_KEY` isn't set in Vercel, so notifications show in the app only, and queued emails are marked skipped rather than piling up. Settings says so.
+- **Email only reaches Luke for now.** Resend is set up but has no verified domain, so it can only send to the Resend account's own address.
 - **Digest timing.** Vercel's Hobby plan runs scheduled jobs at most once a day, so everyone's digest goes out on that one daily run (13:00 UTC: 8 AM Eastern, 5 AM Pacific) instead of at the hour each person chose. On a paid Vercel plan, schedule `/api/cron/daily?hourly=1` every hour and the chosen hour is respected.
 - **Typing indicators and live cursors** weren't in the spec and aren't built. Presence shows who is on the project.
 
+### Deployed (Nov 27, 2026)
+
+1. Saved a copy of every live table (`backups/pre-phase-3-...json`, not committed).
+2. Ran the migration on the live database, after checking it byte for byte against the file CI tested. Then merged `phase-3` into `main` and pushed; Vercel deployed.
+3. Checked on the live site: the new tables and functions respond; the bell, Inbox, notification settings and project activity feed load with no errors; and `/api/cron/daily` refuses calls without the secret.
+4. CI on `phase-3`: lint, typecheck, 70 unit tests, 101 database tests and 30 browser tests (including the two-browser live test) all pass.
+
+The bell gets new notifications through Realtime, and also re-checks its count when tasks on the page change, when the tab comes back into view, and every minute. The browser test only checks that the count appears, so it doesn't prove Realtime alone delivered it.
+
 ### Still needs Luke
 
-1. **`CRON_SECRET` in Vercel.** Vercel → forgeboard → Settings → Environment Variables → add `CRON_SECRET` (Production) with a long random value, for example from `openssl rand -hex 32`, then redeploy. Until then the daily job is refused, so no digests or trial warnings are sent. In-app notifications work regardless.
-2. **Email (optional).** To send notification emails, digests and trial warnings, add `RESEND_API_KEY` and `EMAIL_FROM` (an address on a domain verified in Resend) in Vercel.
+1. ~~`CRON_SECRET` in Vercel~~ Done Nov 27 by Luke.
+2. ~~`RESEND_API_KEY` in Vercel~~ Done Nov 27 by Luke.
+3. **Email to everyone (optional).** Verify a domain you own in Resend (Domains), then set `EMAIL_FROM` in Vercel, for example `Forgeboard <notify@your-domain.com>`.
 
 ### Decisions for Luke
 
