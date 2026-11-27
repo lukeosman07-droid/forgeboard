@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { displayName, matchPerson, withCurrentNames } from "@/lib/people";
-import type { Activity, ItemComment, Project, Section, Subtask, Task } from "@/lib/types";
+import type { Activity, Attachment, ItemComment, Project, ProjectDocument, Section, Subtask, Task } from "@/lib/types";
 import { TASK_SELECT, toTask } from "@/lib/work";
 import {
   Id,
@@ -239,6 +239,18 @@ export type TaskDetail = {
   comments: ItemComment[];
   /** Newest first. Older entries drop off with the plan's history window. */
   activity: Activity[];
+  /** Files on the task, newest first. */
+  attachments: Attachment[];
+  /** The document an AI-captured task came from, and its file when there is one. */
+  source: TaskSource | null;
+};
+
+export type TaskSource = {
+  id: string;
+  title: string | null;
+  origin: ProjectDocument["origin"];
+  created_at: string;
+  file: { id: string; name: string; mime_type: string } | null;
 };
 
 export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> {
@@ -249,15 +261,24 @@ export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> 
   if (!row) return null;
   const raw = toTask(row);
 
-  const [project, sections, subtasks, comments, activity, people] = await Promise.all([
+  const [project, sections, subtasks, comments, activity, people, attachments, source] = await Promise.all([
     supabase.from("projects").select("id, name, color").eq("id", raw.project_id).maybeSingle<TaskDetail["project"]>(),
     supabase.from("sections").select("id, name").eq("project_id", raw.project_id).order("position"),
     supabase.from("subtasks").select("*").eq("item_id", itemId).order("position").order("created_at"),
     supabase.from("item_comments").select("*").eq("item_id", itemId).order("created_at"),
     supabase.from("activity").select("*").eq("item_id", itemId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     peopleIn(supabase, raw.workspace_id),
+    supabase.from("attachments").select("*").eq("item_id", itemId).eq("status", "ready").order("created_at", { ascending: false }),
+    raw.source_document_id
+      ? supabase
+          .from("documents")
+          .select("id, title, origin, created_at, attachments!documents_attachment_id_fkey(id, name, mime_type)")
+          .eq("id", raw.source_document_id)
+          .maybeSingle<Omit<TaskSource, "file"> & { attachments: TaskSource["file"] }>()
+      : Promise.resolve({ data: null }),
   ]);
   if (!project.data) return null;
+  const sourceRow = source.data;
 
   return {
     task: withCurrentNames([raw], people)[0],
@@ -266,6 +287,10 @@ export async function getTaskDetail(itemId: string): Promise<TaskDetail | null> 
     subtasks: (subtasks.data ?? []) as Subtask[],
     comments: (comments.data ?? []) as ItemComment[],
     activity: (activity.data ?? []) as Activity[],
+    attachments: (attachments.data ?? []) as Attachment[],
+    source: sourceRow
+      ? { id: sourceRow.id, title: sourceRow.title, origin: sourceRow.origin, created_at: sourceRow.created_at, file: sourceRow.attachments ?? null }
+      : null,
   };
 }
 
@@ -316,22 +341,31 @@ export async function deleteSubtask(subtaskId: string): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Save reviewed AI results: original text -> notes, checked items -> items
+// Save reviewed AI results: the source document, then the checked items
 // ---------------------------------------------------------------------------
 
 export async function saveExtraction(input: SaveExtractionInput): Promise<ActionResult> {
   const parsed = SaveExtractionSchema.safeParse(input);
   if (!parsed.success) return { error: firstIssue(parsed.error) };
-  const { projectId, rawText, summary, items } = parsed.data;
+  const { projectId, rawText, documentId, summary, items } = parsed.data;
 
   const { supabase } = await session();
 
-  const { data: note, error: noteError } = await supabase
-    .from("notes")
-    .insert({ project_id: projectId, raw_text: rawText, summary: summary || null })
-    .select("id, workspace_id")
-    .single<{ id: string; workspace_id: string }>();
-  if (noteError || !note) return { error: isDenied(noteError) ? NO_ACCESS : "Couldn't save the notes. Please try again." };
+  // Pasted text becomes a new document; a file or email already is one.
+  const { data: note, error: noteError } = documentId
+    ? await supabase
+        .from("documents")
+        .update({ summary: summary || null, captured_at: new Date().toISOString() })
+        .eq("id", documentId)
+        .eq("project_id", projectId)
+        .select("id, workspace_id")
+        .maybeSingle<{ id: string; workspace_id: string }>()
+    : await supabase
+        .from("documents")
+        .insert({ project_id: projectId, raw_text: rawText, summary: summary || null, captured_at: new Date().toISOString() })
+        .select("id, workspace_id")
+        .single<{ id: string; workspace_id: string }>();
+  if (noteError || !note) return { error: !note || isDenied(noteError) ? NO_ACCESS : "Couldn't save the notes. Please try again." };
 
   // New tasks land at the end of the project's first section.
   const [{ data: firstSection }, { data: last }, people] = await Promise.all([
@@ -364,13 +398,15 @@ export async function saveExtraction(input: SaveExtractionInput): Promise<Action
         section_id: item.type === "action_item" ? (firstSection?.id ?? null) : null,
         position: ++position,
         project_id: projectId,
-        note_id: note.id,
+        source_document_id: note.id,
+        source_quote: item.source_quote ?? null,
+        source_page: item.source_page ?? null,
       };
     }),
   );
   if (itemsError) {
     // Don't leave an orphaned note behind if the items failed.
-    await supabase.from("notes").delete().eq("id", note.id);
+    if (!documentId) await supabase.from("documents").delete().eq("id", note.id);
     return { error: "Couldn't save the items. Please try again." };
   }
 

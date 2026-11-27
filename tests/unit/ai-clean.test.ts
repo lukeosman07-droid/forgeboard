@@ -10,7 +10,7 @@ function extraction(overrides: Partial<Extraction> = {}): Extraction {
 }
 
 function action(overrides: Partial<Extraction["action_items"][number]> = {}) {
-  return { title: "Finalize one-line", assignee: "Dev", due_date: "2026-11-20", priority: "high" as const, source_quote: "q", ...overrides };
+  return { title: "Finalize one-line", assignee: "Dev", due_date: "2026-11-20", priority: "high" as const, source_quote: "q", source_page: null as number | null, ...overrides };
 }
 
 describe("isIsoDate", () => {
@@ -61,9 +61,9 @@ describe("cleanExtraction", () => {
     const out = cleanExtraction(
       extraction({
         action_items: [action({ title: "   " })],
-        decisions: [{ title: "", details: "d", source_quote: "q" }],
-        risks: [{ title: " ", details: "d", severity: "low" }],
-        questions: [{ question: "" }],
+        decisions: [{ title: "", details: "d", source_quote: "q", source_page: null }],
+        risks: [{ title: " ", details: "d", severity: "low", source_quote: "q", source_page: null }],
+        questions: [{ question: "", source_quote: "", source_page: null }],
       }),
       NOTES,
     );
@@ -74,7 +74,7 @@ describe("cleanExtraction", () => {
 describe("isEmptyExtraction", () => {
   it("is false as soon as any category has a row", () => {
     expect(isEmptyExtraction(extraction())).toBe(true);
-    expect(isEmptyExtraction(extraction({ questions: [{ question: "Generator required?" }] }))).toBe(false);
+    expect(isEmptyExtraction(extraction({ questions: [{ question: "Generator required?", source_quote: "", source_page: null }] }))).toBe(false);
   });
 });
 

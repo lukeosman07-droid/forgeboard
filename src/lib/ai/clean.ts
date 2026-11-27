@@ -13,11 +13,14 @@ export function isIsoDate(value: string | null): value is string {
 
 /**
  * Cleans an extraction: drops blank rows, dates that aren't real dates, and
- * owners whose name doesn't appear anywhere in the original text.
+ * owners whose name doesn't appear anywhere in the original text. Quotes and
+ * pages are trimmed to what the database accepts.
  */
-export function cleanExtraction(data: Extraction, text: string): Extraction {
-  const haystack = text.toLowerCase();
+export function cleanExtraction(data: Extraction, text: string | null): Extraction {
+  const haystack = text?.toLowerCase() ?? "";
+  // With no text to check against (a scanned PDF), names are kept as the AI read them.
   const nameInText = (name: string) =>
+    text === null ||
     name
       .toLowerCase()
       .split(/[\s,.;()]+/)
@@ -31,15 +34,24 @@ export function cleanExtraction(data: Extraction, text: string): Extraction {
       .map((a) => {
         const assignee = a.assignee.trim();
         return {
-          ...a,
+          ...source(a),
           title: a.title.trim(),
           assignee: assignee && assignee.toLowerCase() !== "unassigned" && nameInText(assignee) ? assignee : "Unassigned",
           due_date: isIsoDate(a.due_date) ? a.due_date : null,
         };
       }),
-    decisions: data.decisions.filter((d) => d.title.trim()),
-    risks: data.risks.filter((r) => r.title.trim()),
-    questions: data.questions.filter((q) => q.question.trim()),
+    decisions: data.decisions.filter((d) => d.title.trim()).map(source),
+    risks: data.risks.filter((r) => r.title.trim()).map(source),
+    questions: data.questions.filter((q) => q.question.trim()).map(source),
+  };
+}
+
+function source<T extends { source_quote: string; source_page: number | null }>(item: T): T {
+  const page = item.source_page;
+  return {
+    ...item,
+    source_quote: (item.source_quote ?? "").trim().slice(0, 2000),
+    source_page: typeof page === "number" && Number.isInteger(page) && page >= 1 && page <= 100000 ? page : null,
   };
 }
 

@@ -93,14 +93,40 @@ export type Section = {
   created_at: string;
 };
 
-export type Note = {
+export type DocumentOrigin = "paste" | "upload" | "email";
+
+/** Text the AI reads: pasted notes, an uploaded file's text, or a forwarded email. */
+export type ProjectDocument = {
   id: string;
   project_id: string;
   workspace_id: string;
-  /** Who made the row. Null once that account is deleted. It does not control access. */
+  /** Who made the row (for email, the sender if they're a member). It does not control access. */
   created_by: string | null;
+  title: string | null;
+  origin: DocumentOrigin;
   raw_text: string;
   summary: string | null;
+  /** For a PDF: where each page starts in raw_text. */
+  page_offsets: number[] | null;
+  attachment_id: string | null;
+  email_from: string | null;
+  captured_at: string | null;
+  created_at: string;
+};
+
+/** A file on a task or document, kept in private storage. */
+export type Attachment = {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  item_id: string | null;
+  document_id: string | null;
+  storage_path: string;
+  name: string;
+  size_bytes: number;
+  mime_type: string;
+  status: "pending" | "ready";
+  created_by: string | null;
   created_at: string;
 };
 
@@ -110,7 +136,10 @@ export type Item = {
   workspace_id: string;
   /** Who made the row. Null once that account is deleted. It does not control access. */
   created_by: string | null;
-  note_id: string | null;
+  /** The document this came from (AI capture), with the words and page it came from. */
+  source_document_id: string | null;
+  source_quote: string | null;
+  source_page: number | null;
   section_id: string | null;
   type: ItemType;
   title: string;

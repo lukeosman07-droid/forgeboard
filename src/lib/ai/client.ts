@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import type { BetaContentBlockParam } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { z } from "zod";
 
 // The one place that talks to the Anthropic API. Every AI feature goes through
@@ -14,6 +15,18 @@ export const AI_MODELS = {
 
 /** Tokens and timing of one call, recorded in ai_usage. Absent when the call never reached the model. */
 export type AiCallUsage = { model: string; inputTokens: number; outputTokens: number; latencyMs: number };
+
+/** Adds up the usage of several calls (a document read in chunks counts as one run). */
+export function sumUsage(parts: (AiCallUsage | undefined)[]): AiCallUsage | undefined {
+  const real = parts.filter((p): p is AiCallUsage => !!p);
+  if (real.length === 0) return undefined;
+  return {
+    model: real[0].model,
+    inputTokens: real.reduce((n, p) => n + p.inputTokens, 0),
+    outputTokens: real.reduce((n, p) => n + p.outputTokens, 0),
+    latencyMs: Math.max(...real.map((p) => p.latencyMs)),
+  };
+}
 
 export type AiResult<T> = ({ ok: true; data: T } | { ok: false; error: string; status: number }) & { usage?: AiCallUsage };
 
@@ -43,7 +56,8 @@ export async function runStructured<T>(options: {
   feature: string;
   schema: z.ZodType<T>;
   system: string;
-  content: string;
+  /** Text, or content blocks (a PDF as a document block plus text). */
+  content: string | BetaContentBlockParam[];
   maxTokens: number;
   effort?: "low" | "medium" | "high";
   model?: string;

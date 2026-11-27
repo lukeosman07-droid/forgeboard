@@ -6,7 +6,7 @@ import { useWorkspace } from "@/components/app/workspace-context";
 import ProjectLive from "@/components/work/project-live";
 import TaskStore, { useTaskStore } from "@/components/work/task-store";
 import { Icon, MenuItem, Popover, type IconName } from "@/components/work/ui";
-import type { Item, Note, Project, Section, Task } from "@/lib/types";
+import type { Item, ProjectDocument, Project, Section, Task } from "@/lib/types";
 import { COLOR_NAMES, colorOf } from "@/lib/work";
 import BoardView from "./views/board-view";
 import CalendarView from "./views/calendar-view";
@@ -41,7 +41,7 @@ export default function ProjectWorkspace(props: {
   sections: Section[];
   tasks: Task[];
   logItems: Item[];
-  notes: Note[];
+  notes: ProjectDocument[];
   usage: Usage;
   /** User IDs this project is shared with by name (how guests get access). */
   sharedWith: string[];
@@ -174,7 +174,7 @@ function Workspace({
 
       <div role="tabpanel">
         {view === "overview" && (
-          <OverviewView project={project} sections={sections} tasks={tasks} logItems={logItems} usage={usage} onOpenView={switchView} />
+          <OverviewView project={project} sections={sections} tasks={tasks} logItems={logItems} usage={usage} sharedWith={sharedWith} onOpenView={switchView} />
         )}
         {view === "table" && <TableView project={project} sections={sections} tasks={visible} filtering={filtering} />}
         {view === "board" && <BoardView project={project} sections={sections} tasks={visible} />}

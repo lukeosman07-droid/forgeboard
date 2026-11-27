@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { writeStatusReport } from "@/lib/ai/assist";
+import { projectDataText } from "@/lib/ai/project-data";
 import { aiError as fail, claimAiUse, safeToday } from "@/lib/ai/usage";
 import { createClient } from "@/lib/supabase/server";
-import { STATUS_BY_ID } from "@/lib/work";
 import type { Item, Project, Section } from "@/lib/types";
 
 export const maxDuration = 120;
@@ -38,33 +38,7 @@ export async function POST(request: NextRequest) {
   const tasks = allItems.filter((i) => i.type === "action_item");
   if (tasks.length === 0) return fail(400, "Add some tasks first; there's nothing to report on yet.");
 
-  const sectionName = new Map(((sections.data ?? []) as Section[]).map((s) => [s.id, s.name]));
-  const lines = [
-    `Project: ${project.data.name}`,
-    project.data.description ? `Description: ${project.data.description}` : "",
-    "",
-    "Tasks:",
-    ...tasks.map((t) =>
-      [
-        `- ${t.title}`,
-        `status: ${STATUS_BY_ID[t.status]?.label ?? t.status}`,
-        t.section_id && sectionName.get(t.section_id) ? `section: ${sectionName.get(t.section_id)}` : "",
-        t.assignee ? `owner: ${t.assignee}` : "owner: unassigned",
-        t.due_date ? `due: ${t.due_date}${t.status !== "done" && t.due_date < today ? " (OVERDUE)" : ""}` : "",
-        t.priority ? `priority: ${t.priority}` : "",
-        t.completed_at ? `completed: ${t.completed_at.slice(0, 10)}` : "",
-      ]
-        .filter(Boolean)
-        .join(" | "),
-    ),
-    "",
-    "Open risks and questions:",
-    ...allItems
-      .filter((i) => (i.type === "risk" || i.type === "question") && i.status !== "done")
-      .map((i) => `- (${i.type}) ${i.title}`),
-  ]
-    .join("\n")
-    .slice(0, 40_000);
+  const lines = projectDataText(project.data, (sections.data ?? []) as Section[], allItems, today);
 
   const { data: workspace } = await supabase
     .from("workspaces")

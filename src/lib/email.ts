@@ -5,6 +5,7 @@ import PaymentFailedEmail, { type PaymentFailedEmailProps } from "@/emails/payme
 import NotificationEmail, { type NotificationEmailProps } from "@/emails/notification";
 import DueDigestEmail, { type DueDigestEmailProps } from "@/emails/due-digest";
 import TrialEndingEmail, { type TrialEndingEmailProps } from "@/emails/trial-ending";
+import WeeklyReportEmail, { type WeeklyReportEmailProps } from "@/emails/weekly-report";
 
 // Transactional email through Resend. Until RESEND_API_KEY is set, nothing is
 // sent and callers fall back to showing the link so it can be shared by hand.
@@ -94,4 +95,9 @@ export function sendDueDigestEmail(to: string, props: DueDigestEmailProps) {
 /** Warns a workspace owner that the free trial ends soon. */
 export function sendTrialEndingEmail(to: string, props: TrialEndingEmailProps) {
   return send(to, `Your Forgeboard trial for ${props.workspaceName} ends ${props.endsOn}`, TrialEndingEmail(props), "Trial-ending");
+}
+
+/** A project's weekly AI report. */
+export function sendWeeklyReportEmail(to: string, props: WeeklyReportEmailProps) {
+  return send(to, `Weekly report: ${props.projectName} (week of ${props.weekOf})`, WeeklyReportEmail(props), "Weekly report");
 }

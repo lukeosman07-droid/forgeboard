@@ -334,7 +334,7 @@ async function createSampleProject(ownerId, workspaceId, def) {
   let noteId = null;
   if (def.note) {
     const { data: note, error } = await supabase
-      .from("notes")
+      .from("documents")
       .insert({ project_id: project.id, created_by: ownerId, raw_text: def.note, summary: def.noteSummary ?? null })
       .select()
       .single();
@@ -350,7 +350,7 @@ async function createSampleProject(ownerId, workspaceId, def) {
       project_id: project.id,
       created_by: ownerId,
       section_id: sectionId.get(s.name),
-      note_id: noteId,
+      source_document_id: noteId,
       type: "action_item",
       title: t.title,
       details: t.details ?? null,

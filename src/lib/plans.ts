@@ -20,7 +20,7 @@ export const GRACE_DAYS = 7;
 export const HOURLY_AI_LIMIT = 30;
 
 /** Longest notes text we send to the AI, in characters. */
-export const MAX_NOTES_CHARS = 30_000;
+export const MAX_NOTES_CHARS = 200_000;
 
 const GB = 1024 ** 3;
 

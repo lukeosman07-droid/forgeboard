@@ -10,7 +10,7 @@ import type { AiCallUsage } from "./client";
 // This uses the service-role client: ai_usage can't be written by users, so a
 // browser can never reset its own count.
 
-export type AiFeature = "extract" | "plan" | "status_report";
+export type AiFeature = "extract" | "plan" | "status_report" | "ask";
 
 type Claim = { allowed: boolean; reason: string; usage_id: number | null; runs_left: number | null; runs_limit: number | null };
 

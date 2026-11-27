@@ -10,9 +10,11 @@ import { addComment, deleteComment, editComment } from "@/server/comments";
 import type { TaskPatch } from "@/server/schemas";
 import { addSubtask, deleteSubtask, getTaskDetail, updateSubtask, type TaskDetail } from "@/server/tasks";
 import { useToday } from "@/lib/dates";
-import type { Activity, ItemComment, Subtask, Task } from "@/lib/types";
+import { fileHref } from "@/lib/files";
+import type { Activity, Attachment, ItemComment, Subtask, Task } from "@/lib/types";
 import { colorOf, isOverdue } from "@/lib/work";
 import ActivityList from "./activity-list";
+import Attachments from "./attachments";
 import AssigneePicker from "./assignee-picker";
 import Markdown from "./markdown";
 import MentionInput, { type MentionDraft } from "./mention-input";
@@ -41,6 +43,7 @@ export default function TaskDrawer({
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState<ItemComment[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [files, setFiles] = useState<Attachment[]>([]);
   const [localPatch, setLocalPatch] = useState<Partial<Task>>({});
   const [error, setError] = useState<string>();
 
@@ -53,6 +56,7 @@ export default function TaskDrawer({
           setSubtasks(d.subtasks);
           setComments(d.comments);
           setActivity(d.activity);
+          setFiles(d.attachments);
         }
       }),
     [taskId],
@@ -247,6 +251,10 @@ export default function TaskDrawer({
               />
               </fieldset>
 
+              {loaded?.source && <SourceNote source={loaded.source} quote={task.source_quote} page={task.source_page} projectId={task.project_id} />}
+
+              <Attachments projectId={task.project_id} itemId={task.id} files={files} setFiles={setFiles} canEdit={canEdit} />
+
               <Updates
                 comments={comments}
                 setComments={setComments}
@@ -272,6 +280,33 @@ export default function TaskDrawer({
         )}
       </aside>
     </div>
+  );
+}
+
+/** Where an AI-captured task came from: the words, and a link to the file at that page. */
+function SourceNote({ source, quote, page, projectId }: { source: NonNullable<TaskDetail["source"]>; quote: string | null; page: number | null; projectId: string }) {
+  const path = useWorkspacePath();
+  const name = source.title || (source.origin === "email" ? "Email" : "Meeting notes");
+  const label = page ? `${name}, page ${page}` : name;
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Source</h3>
+      <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
+        {quote && <p className="italic text-slate-300">“{quote}”</p>}
+        <p className={`${quote ? "mt-1.5 " : ""}flex flex-wrap items-center gap-x-2 text-xs text-slate-500`}>
+          <Icon name="file" className="h-3.5 w-3.5" />
+          {source.file ? (
+            <a href={fileHref(source.file.id, page)} target="_blank" rel="noopener noreferrer" className="font-medium text-orange-300 hover:text-orange-200">
+              Open {label}
+            </a>
+          ) : (
+            <Link href={path(`/projects/${projectId}?view=notes&doc=${source.id}`)} className="font-medium text-orange-300 hover:text-orange-200">
+              Open {label}
+            </Link>
+          )}
+        </p>
+      </div>
+    </section>
   );
 }
 

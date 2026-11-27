@@ -87,7 +87,7 @@ export default function CommandPalette() {
       hint: (
         <span className="flex items-center gap-2">
           <span className="max-w-32 truncate">{m.project_name}</span>
-          {m.kind === "note" ? "Notes" : m.item_type === "action_item" && m.status ? <StatusPill status={m.status} className="!py-0.5" /> : "Log"}
+          {m.kind === "document" ? "Notes" : m.item_type === "action_item" && m.status ? <StatusPill status={m.status} className="!py-0.5" /> : "Log"}
         </span>
       ),
       href: path(matchPath(m)),
@@ -169,7 +169,7 @@ export default function CommandPalette() {
 }
 
 function matchPath(m: SearchMatch) {
-  if (m.kind === "note") return `/projects/${m.project_id}?view=notes`;
+  if (m.kind === "document") return `/projects/${m.project_id}?view=notes&doc=${m.id}`;
   if (m.item_type !== "action_item") return `/projects/${m.project_id}?view=log`;
   return `/projects/${m.project_id}?view=table&task=${m.item_id}`;
 }

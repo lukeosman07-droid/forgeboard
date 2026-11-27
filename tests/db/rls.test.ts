@@ -95,7 +95,7 @@ async function join(inviter: TestUser, workspace: string, user: TestUser, role: 
 const TABLES: { name: string; change: Record<string, unknown> | null }[] = [
   { name: "projects", change: { name: "Changed" } },
   { name: "sections", change: { name: "Changed" } },
-  { name: "notes", change: { raw_text: "Changed" } },
+  { name: "documents", change: { raw_text: "Changed" } },
   { name: "items", change: { title: "Changed" } },
   { name: "subtasks", change: { title: "Changed" } },
   { name: "item_comments", change: null },
@@ -128,11 +128,11 @@ beforeAll(async () => {
   // A member can insert into every table (this is the "members can insert" check).
   rows.projects = await insert(member.client, "projects", { workspace_id: x, name: "X's project" });
   rows.sections = await insert(member.client, "sections", { project_id: rows.projects, name: "Design" });
-  rows.notes = await insert(member.client, "notes", { project_id: rows.projects, raw_text: "X's private meeting notes" });
+  rows.documents = await insert(member.client, "documents", { project_id: rows.projects, raw_text: "X's private meeting notes" });
   rows.items = await insert(member.client, "items", {
     project_id: rows.projects,
     section_id: rows.sections,
-    note_id: rows.notes,
+    source_document_id: rows.documents,
     type: "action_item",
     title: "X's task",
   });
@@ -234,7 +234,7 @@ describe("workspace isolation", () => {
   it("can't add rows under another workspace's project or task", async () => {
     const attempts: [string, Record<string, unknown>][] = [
       ["sections", { project_id: rows.projects, name: "Intruder" }],
-      ["notes", { project_id: rows.projects, raw_text: "Intruder" }],
+      ["documents", { project_id: rows.projects, raw_text: "Intruder" }],
       ["items", { project_id: rows.projects, type: "action_item", title: "Intruder" }],
       ["subtasks", { item_id: rows.items, title: "Intruder" }],
       ["item_comments", { item_id: rows.items, body: "Intruder" }],
@@ -247,7 +247,7 @@ describe("workspace isolation", () => {
   });
 
   it("can't link its own task to another workspace's section or note", async () => {
-    for (const link of [{ section_id: rows.sections }, { note_id: rows.notes }]) {
+    for (const link of [{ section_id: rows.sections }, { source_document_id: rows.documents }]) {
       const { error } = await outsider.client
         .from("items")
         .insert({ project_id: yProject, type: "action_item", title: "Linked", ...link })

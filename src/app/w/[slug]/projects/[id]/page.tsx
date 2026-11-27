@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { withCurrentNames } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
 import { TASK_SELECT, toTask } from "@/lib/work";
-import type { Item, Note, Project, Section } from "@/lib/types";
+import type { Item, ProjectDocument, Project, Section } from "@/lib/types";
 import { getWorkspace } from "@/lib/workspaces";
 import ProjectWorkspace from "./project-workspace";
 import { VIEW_IDS, type ViewId } from "./view-ids";
@@ -43,11 +43,11 @@ async function ProjectLoader({
     supabase.from("sections").select("*").eq("project_id", id).order("position").overrideTypes<Section[], { merge: false }>(),
     supabase.from("items").select(TASK_SELECT).eq("project_id", id).order("position").order("created_at"),
     supabase
-      .from("notes")
+      .from("documents")
       .select("*")
       .eq("project_id", id)
       .order("created_at", { ascending: false })
-      .overrideTypes<Note[], { merge: false }>(),
+      .overrideTypes<ProjectDocument[], { merge: false }>(),
     supabase.from("project_members").select("user_id").eq("project_id", id).overrideTypes<{ user_id: string }[], { merge: false }>(),
   ]);
 

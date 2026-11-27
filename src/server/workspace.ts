@@ -57,14 +57,14 @@ export async function createSampleProject(slug: string, today?: string): Promise
 
   const { supabase } = await session();
   const { data: note } = await supabase
-    .from("notes")
+    .from("documents")
     .insert({ project_id: created.id, raw_text: SAMPLE_PROJECT.notes, summary: SAMPLE_PROJECT.notesSummary })
     .select("id")
     .single();
   const { error } = await supabase.from("items").insert(
     SAMPLE_PROJECT.log.map((entry, i) => ({
       project_id: created.id,
-      note_id: note?.id ?? null,
+      source_document_id: note?.id ?? null,
       type: entry.type,
       title: entry.title,
       details: entry.details,

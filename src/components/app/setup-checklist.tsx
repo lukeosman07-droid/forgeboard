@@ -11,7 +11,7 @@ export default async function SetupChecklist({ workspaceId, slug }: { workspaceI
   const head = { count: "exact" as const, head: true };
   const [projects, notes, members, invites] = await Promise.all([
     supabase.from("projects").select("id", head).eq("workspace_id", workspaceId),
-    supabase.from("notes").select("id", head).eq("workspace_id", workspaceId),
+    supabase.from("documents").select("id", head).eq("workspace_id", workspaceId),
     supabase.from("workspace_members").select("user_id", head).eq("workspace_id", workspaceId),
     supabase.from("workspace_invites").select("id", head).eq("workspace_id", workspaceId),
   ]);

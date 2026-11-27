@@ -56,7 +56,9 @@ export async function createProject(slug: string, input: NewProjectInput): Promi
         due_date: due,
         status: "open",
         position: ++position,
-        note_id: null,
+        source_document_id: null,
+        source_quote: null,
+        source_page: null,
       };
     }),
   );

@@ -10,7 +10,7 @@ import { session, workspaceFor } from "./session";
 // limits a guest to the projects shared with them.
 
 export type SearchMatch = {
-  kind: "task" | "comment" | "note";
+  kind: "task" | "comment" | "document";
   id: string;
   item_id: string | null;
   project_id: string;
@@ -54,7 +54,7 @@ export async function searchWorkspace(slug: string, query: string): Promise<Sear
   // One row per task: a task that matches on its title and in a comment shows once.
   const seen = new Set<string>();
   const unique = ((matches.data ?? []) as SearchMatch[]).filter((m) => {
-    const key = m.item_id ?? `note-${m.id}`;
+    const key = m.item_id ?? `document-${m.id}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { StatusReport } from "@/lib/ai/assist-schema";
 import { useWorkspacePath } from "@/components/app/workspace-context";
 import ProjectFeed from "@/components/work/project-feed";
+import WeeklyReports from "@/components/work/weekly-reports";
 import { useTaskStore } from "@/components/work/task-store";
 import { Avatar, Icon, StatusPill, statusCounts } from "@/components/work/ui";
 import { formatDate, localToday, useToday } from "@/lib/dates";
@@ -20,6 +21,7 @@ export default function OverviewView({
   tasks,
   logItems,
   usage,
+  sharedWith,
   onOpenView,
 }: {
   project: Project;
@@ -27,6 +29,8 @@ export default function OverviewView({
   tasks: Task[];
   logItems: Item[];
   usage: Usage;
+  /** User IDs the project is shared with (guests who may get the weekly report). */
+  sharedWith: string[];
   onOpenView: (view: ViewId) => void;
 }) {
   const today = useToday();
@@ -86,6 +90,7 @@ export default function OverviewView({
       </div>
 
       <AiStatusReport projectId={project.id} usage={usage} />
+      <WeeklyReports project={project} sharedWith={sharedWith} />
       <p className="text-right text-xs">
         <a href={path(`/projects/${project.id}/export`)} download className="text-slate-400 hover:text-white">
           Export this project as CSV

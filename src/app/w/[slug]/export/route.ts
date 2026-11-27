@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext<"/w/[s
       allRows(supabase, "items", "*", "workspace_id", ws),
       allRows(supabase, "subtasks", "*", "workspace_id", ws),
       allRows(supabase, "item_comments", "*", "workspace_id", ws),
-      allRows(supabase, "notes", "*", "workspace_id", ws),
+      allRows(supabase, "documents", "*", "workspace_id", ws),
       supabase.rpc("workspace_people", { ws }).then(({ data }) => (data ?? []) as Person[]),
     ]);
 
@@ -40,7 +40,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext<"/w/[s
       { name: "README.txt", data: `Export of "${workspace.name}" from Forgeboard, ${new Date().toISOString()}.\r\nEach CSV has a header row. IDs link rows across files.\r\n` },
       { name: "projects.csv", data: rowsToCsv(projects, ["id", "name", "description", "color", "manager_id", "created_by", "created_at"]) },
       { name: "sections.csv", data: rowsToCsv(withProject(sections), ["id", "project_id", "project", "name", "position", "created_at"]) },
-      { name: "items.csv", data: rowsToCsv(withProject(withSectionNames(items, sections)), ["project", ...ITEM_COLUMNS, "assignee_id", "note_id"]) },
+      { name: "items.csv", data: rowsToCsv(withProject(withSectionNames(items, sections)), ["project", ...ITEM_COLUMNS, "assignee_id", "source_document_id"]) },
       { name: "subtasks.csv", data: rowsToCsv(subtasks, ["id", "item_id", "title", "done", "position", "created_by", "created_at"]) },
       { name: "comments.csv", data: rowsToCsv(comments, ["id", "item_id", "body", "created_by", "created_at"]) },
       { name: "notes.csv", data: rowsToCsv(withProject(notes), ["id", "project_id", "project", "summary", "raw_text", "created_by", "created_at"]) },

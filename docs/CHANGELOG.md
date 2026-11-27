@@ -2,6 +2,69 @@
 
 One entry per phase of [SPEC.md](SPEC.md): what shipped, what was skipped and why, and what still needs Luke.
 
+## Phase 4: Files and AI capture (Nov 27, 2026)
+
+Projects can now hold files, and the AI reads PDFs, Word files, emails and meeting transcripts, not just pasted text. Every task it finds keeps the sentence it came from and the page, and opens the file at that page. Each project can have an email address to forward minutes to. Ask Forgeboard answers questions about your projects with sources. Managers can have a weekly AI report written and emailed every Monday, with a read-only link to share.
+
+### Shipped
+
+**Database** (`supabase/migrations/20261129000000_files_and_capture.sql`)
+
+- **Documents.** `notes` is now `documents`, keeping every row. New columns: title, origin (pasted, uploaded or email), the page each PDF page starts at, sender, the file it came from, and when the AI last read it. Tasks' `note_id` is now `source_document_id`, and tasks gained `source_quote` and `source_page`. Search covers document titles.
+- **Attachments.** Files on a task or document, kept in a private Storage bucket (`attachments`, 25 MB per file). Allowed types: PDF, Word, Excel, PNG, JPEG, DWG, DXF, text, email (.eml) and transcripts (.vtt, .srt). HTML, SVG and scripts are refused, so nothing uploaded can run in a browser.
+  - The database picks each file's path (`workspace/project/id-name`). Storage accepts an upload only to a path someone started with a pending row they created, and only people who can edit the project can start one. Reading needs access to the project.
+  - Storage quota: a trigger checks the plan's storage (1 / 5 / 50 / 250 GB) while holding a lock on the workspace, so two uploads at once can't both squeeze past it. Past the limit it's refused with "This file would go over your plan's 1 GB of storage (1019 MB used). Delete some files or upgrade." Deleting a file gives the space back.
+  - At most 100 uploads per person per hour. Uploads never finished are removed after a day.
+- **Project inbox.** `project_inboxes` gives a project a secret address, `p-<32 hex>@<inbox domain>`. People who can edit the project can see it and turn it on; the project's manager can change the address or allow outside senders. `receive_inbound_email()` (server only) files a message as a document if the sender is a workspace member who can see the project (or outside senders are allowed), the plan includes file AI and the workspace isn't read-only. At most 200 emails a day per project.
+- **Weekly reports.** `report_settings` (on/off and who gets it) and `project_reports` (one per project per week). Managers write them on plans with the workload feature; anyone on the project can read them. Each report has a 64-hex share token that works for 30 days; `shared_report()` is the only thing a signed-out visitor can read.
+- **Ask search.** `ask_search()` finds tasks, decisions, risks, comments and documents matching a question, runs as the caller so Row Level Security decides what it can see, and returns highlighted excerpts. It returns nothing on plans without file AI.
+
+**App**
+
+- **Files on tasks.** The task panel has a Files section: drag and drop or "Attach files", image previews, download and delete. Files upload straight from the browser to Storage (Vercel caps requests at 4.5 MB). `/api/files/<id>` checks access, then sends a 5-minute signed link; PDFs open at `#page=N`.
+- **AI Capture** (AI Notes tab), rebuilt with three sources:
+  - Paste text, as before.
+  - From a file: PDF, Word, email, transcript or text. PDFs are read page by page. A scanned PDF (no text layer) is sent to the AI as a document so it can read the images, up to 100 pages and 20 MB.
+  - Project inbox: turn it on, copy the address, see emails as they arrive and read one with AI.
+  - Long documents are read in parts of about 24,000 characters (up to 12 parts, 4 at a time), split between pages, then merged: the same item found in two parts is kept once with the details from both.
+  - Each item's page comes from where its quote is actually found in the file, not the AI's guess.
+  - Review shows the page, the owner match ("→ Ada Lovelace" or "Not a member; kept as a name"), and "Similar to existing task" warnings. Likely duplicates start unticked.
+- **Task source.** A task made by AI shows the quote it came from and "Open minutes.pdf, page 23", which opens the file at that page.
+- **Documents list** on the AI Notes tab: every document with where it came from, page count, sender, a link to the file and its text.
+- **Ask Forgeboard** (`/w/<slug>/ask`, in the sidebar). Answers only from what search found that you can see, cites every fact like [S1], and lists the sources with links. Citations that don't point at a real source are removed; an answer with none left becomes "I could not find that." No AI run is used when nothing matches.
+- **Weekly report** on the project Overview, for managers: "Send every Monday", recipients, "Write this week's report now" (and email it), past reports with a share link and "Stop sharing". The shared page is `/r/<token>`, not indexed by search engines.
+- **Inbound email webhook.** `POST /api/inbound-email` takes a raw email signed with HMAC-SHA256 (`INBOUND_EMAIL_SECRET`), refuses signatures older than 5 minutes and bodies over 4 MB. [docs/INBOUND_EMAIL.md](INBOUND_EMAIL.md) explains the contract and a free Cloudflare Email Worker setup.
+- **Daily job** also sends weekly reports (on Mondays) and removes unfinished uploads.
+- New env vars in `.env.example`: `INBOUND_EMAIL_SECRET`, `INBOUND_EMAIL_DOMAIN`.
+- New packages: `unpdf` (PDF text page by page, needed for page numbers), `mammoth` (Word) and `postal-mime` (email).
+
+**Tests**
+
+- `tests/unit/capture.test.ts`: HTML and transcript cleaning, page joining, chunking, quote-to-page matching, duplicates, merging, and reading real PDF, email, VTT and text files. A generated 40-page PDF of minutes goes through the real reader and the extraction pipeline (with the AI call stubbed to report the wrong page): all 8 tasks and the decision land on their correct pages.
+- `tests/unit/files.test.ts`: upload rules, inbound signatures (tampering, wrong secret, old timestamps), inbox address parsing, citation clean-up and week dates.
+- `tests/db/files.test.ts`: upload paths, Storage access, the quota message, blocked types, guests and outsiders, the inbox (who can see it, who may send, outside senders), report permissions and expiring share links, and that Ask never returns a project the asker can't read.
+- `tests/e2e/files.spec.ts`: a signed email shows up in the project inbox within a minute (unsigned is refused), and an upload past the quota shows the message in the task panel.
+
+### Skipped or deferred
+
+- **Email attachments aren't imported.** Their names are listed at the end of the document. Forward the PDF itself, or upload it.
+- **No mail domain yet.** Nothing receives mail until a domain is pointed at the webhook (see below). Until then the inbox tab says so.
+- **Previews** are images and PDFs in the browser. Word, Excel, DWG and DXF files download.
+- **The merge pass is plain code, not a second AI call.** It's cheaper and predictable; an AI merge can come later if duplicates slip through.
+
+### Still needs Luke
+
+1. **Inbound email (optional).** Add a domain or subdomain to Cloudflare, turn on Email Routing, and follow [docs/INBOUND_EMAIL.md](INBOUND_EMAIL.md). Then set `INBOUND_EMAIL_SECRET` and `INBOUND_EMAIL_DOMAIN` in Vercel and redeploy.
+
+### Decisions for Luke
+
+- Inbound email is a signed webhook any provider can call, rather than tying Forgeboard to one mail service. Cloudflare's is free.
+- Weekly reports go out from the daily job when it's Monday (UTC), because the Hobby plan allows one scheduled run a day. Each counts as one AI run.
+- Report recipients are people in the workspace. Guests only if the project is shared with them.
+- Share links last 30 days, and the manager can stop sharing any time.
+- Limits: 100 uploads per person per hour, 200 emails per project per day, scanned PDFs up to 100 pages and 20 MB, documents up to 1,000,000 characters.
+- The tab is still called "AI Notes" so existing links and habits keep working.
+
 ## Phase 3: Collaboration (Nov 27, 2026)
 
 People working on the same project now see each other's changes live, can talk in comments with @mentions, get notified in the app and by email, and can see the history of every task. Search covers tasks, comments and meeting notes.

@@ -30,6 +30,9 @@ export const ItemInputSchema = z.object({
   assignee: optionalText(200),
   due_date: optionalDate,
   priority: PriorityEnum.nullable().optional().or(z.literal("").transform(() => null)),
+  /** Where an AI-captured item came from: the words, and the page for PDFs. */
+  source_quote: optionalText(2000),
+  source_page: z.number().int().min(1).max(100000).nullable().optional(),
 });
 
 export type ItemInput = z.input<typeof ItemInputSchema>;
@@ -96,12 +99,17 @@ export const TaskPatchSchema = z.object({
 
 export type TaskPatch = z.input<typeof TaskPatchSchema>;
 
-export const SaveExtractionSchema = z.object({
-  projectId: z.uuid(),
-  rawText: z.string().trim().min(1).max(MAX_NOTES_CHARS),
-  summary: z.string().trim().max(2000).nullable(),
-  items: z.array(ItemInputSchema).min(1, "Select at least one item to save.").max(300),
-});
+export const SaveExtractionSchema = z
+  .object({
+    projectId: z.uuid(),
+    /** Pasted notes, saved as a new document. */
+    rawText: z.string().trim().min(1).max(MAX_NOTES_CHARS).optional(),
+    /** Or the document (a file or email) the items were read from. */
+    documentId: z.uuid().optional(),
+    summary: z.string().trim().max(2000).nullable(),
+    items: z.array(ItemInputSchema).min(1, "Select at least one item to save.").max(300),
+  })
+  .refine((v) => !!v.rawText !== !!v.documentId, "Nothing to save the items from.");
 
 export type SaveExtractionInput = z.input<typeof SaveExtractionSchema>;
 
