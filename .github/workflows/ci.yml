@@ -52,7 +52,13 @@ jobs:
       - run: npm ci
 
       - name: Start a local Supabase with every migration applied
-        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector
+        run: |
+          set -o pipefail
+          if ! npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector 2>&1 | tee "$RUNNER_TEMP/supabase-start.log"; then
+            # Show why in the run summary, which is readable without the full log.
+            echo "::error title=Supabase start failed::$(grep -v '^ *$' "$RUNNER_TEMP/supabase-start.log" | tail -25 | tr -s '\r\n' '  ' | cut -c1-4000)"
+            exit 1
+          fi
 
       - name: Point the app and tests at it
         run: |
