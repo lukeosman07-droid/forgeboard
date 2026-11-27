@@ -368,7 +368,7 @@ async function createSampleProject(ownerId, workspaceId, def) {
     project_id: project.id,
     created_by: ownerId,
     section_id: null,
-    note_id: noteId,
+    source_document_id: noteId,
     type: l.type,
     title: l.title,
     details: l.details ?? null,
