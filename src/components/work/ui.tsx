@@ -249,6 +249,14 @@ export function PriorityFlag({ priority }: { priority: Priority | null }) {
 }
 
 /** A date shown as text that turns into a native date picker on click. */
+function openPicker(input: HTMLInputElement) {
+  try {
+    input.showPicker?.();
+  } catch {
+    // Not allowed here (e.g. disabled); the browser's own behavior applies.
+  }
+}
+
 export function DateField({
   value,
   onChange,
@@ -275,6 +283,15 @@ export function DateField({
         aria-label={label}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
+        // The input is invisible, and Chrome only opens its calendar from a small
+        // icon, so open it on any click (and Enter/Space) instead.
+        onClick={(e) => openPicker(e.currentTarget)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openPicker(e.currentTarget);
+          }
+        }}
         className="absolute inset-0 cursor-pointer opacity-0 [color-scheme:dark]"
       />
     </label>
