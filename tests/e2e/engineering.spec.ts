@@ -119,8 +119,12 @@ test("an RFI is created from an extracted question in two clicks", async ({ page
 
   // The question now links to its RFI instead of offering a new one.
   await expect(questions).toHaveCount(0);
-  await page.getByRole("tab", { name: "Decisions & Risks" }).click();
-  await page.getByRole("button", { name: /^Risks & Questions/ }).click();
+  await page.goto(`/w/${slug}/projects/${projectId}?view=log`);
+  const riskTab = page.getByRole("button", { name: /^Risks & Questions/ });
+  await expect(async () => {
+    await riskTab.click({ timeout: 2_000 });
+    await expect(riskTab).toHaveAttribute("aria-pressed", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Open RFI-001" })).toBeVisible();
 });
 
