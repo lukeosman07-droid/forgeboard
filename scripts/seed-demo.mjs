@@ -319,7 +319,7 @@ const PROJECTS = [
             { title: "Show the bypass pumping connection on the mechanical plan", assignee: "Sam", disposition: "incorporate", due: 6 },
             { title: "Label the VFD bypass contactors on the one-line", assignee: "Dev", disposition: "incorporate", due: 5, status: "done" },
             { title: "Consider a second wet well level transmitter", assignee: "Priya", disposition: "pending" },
-            { title: "Move the MCC to the north wall", assignee: "Maria", disposition: "reject", details: "No room for the required clearances." },
+            { title: "Move the MCC to the north wall", assignee: "Maria", disposition: "rejected", details: "No room for the required clearances." },
           ],
         },
       ],
