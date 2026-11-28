@@ -11,12 +11,13 @@ export default function Pricing({ full = false }: { full?: boolean }) {
     <Section
       id="pricing"
       eyebrow="Pricing"
-      title="One flat price per firm, AI included"
-      intro={`Not per seat: add the intern or the client's PM without a new bill. Every workspace starts with a ${TRIAL_DAYS}-day free trial of everything, no card needed.`}
+      title="One price per firm, not per seat"
+      intro={`Add the intern or the client's project manager without a new bill. Every workspace starts with a ${TRIAL_DAYS}-day trial of everything, no card needed.`}
+      className="border-b border-white/[0.06]"
     >
       <PlanPicker />
 
-      <div className="mx-auto mt-8 flex max-w-6xl flex-col items-center justify-between gap-4 rounded-2xl border border-white/10 bg-slate-900/60 px-8 py-6 sm:flex-row">
+      <div className="mx-auto mt-8 flex max-w-6xl flex-col items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-900/60 px-8 py-6 sm:flex-row">
         <div>
           <p className="text-lg font-semibold text-white">Enterprise</p>
           <p className="text-slate-400">More than 50 people, custom contract and invoicing, dedicated onboarding.</p>

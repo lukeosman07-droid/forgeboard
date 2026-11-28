@@ -21,3 +21,124 @@ body {
   background: #020617; /* slate-950 */
   color: #e2e8f0; /* slate-200 */
 }
+
+/* ---------------------------------------------------------------------------
+   Landing page motion.
+   The hero plays once on load. Everything below it is hidden only after
+   scroll-reveal.tsx has run (it adds .fb-armed to <html>), and each block gets
+   .fb-on the first time it scrolls into view. No JavaScript, or reduced
+   motion, means the plain static page.
+   --------------------------------------------------------------------------- */
+
+@keyframes fb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+@keyframes fb-lift {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Hero, on load. */
+  .fb-in {
+    animation: fb-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--d, 0) * 90ms);
+  }
+  .fb-in-window {
+    animation: fb-lift 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: 450ms;
+  }
+  .fb-in-rows > * {
+    animation: fb-rise 0.5s ease-out both;
+    animation-delay: calc(700ms + var(--i, 0) * 80ms);
+  }
+
+  /* Stagger index for children, inherited by everything inside them. */
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(2) { --i: 1; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(3) { --i: 2; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(4) { --i: 3; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(5) { --i: 4; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(6) { --i: 5; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(7) { --i: 6; }
+  :is(.fb-stagger, .fb-items, .fb-in-rows) > :nth-child(8) { --i: 7; }
+
+  html.fb-armed {
+    --fb-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  html.fb-armed :is(.fb-reveal, .fb-window, .fb-stagger > *, .fb-items > *, .fb-bar, .fb-late, .fb-check) {
+    transition:
+      opacity 0.7s var(--fb-ease),
+      transform 0.8s var(--fb-ease);
+  }
+
+  /* Text blocks fade up. */
+  html.fb-armed .fb-reveal:not(.fb-on) {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  /* Product previews lift in a beat after their text. */
+  html.fb-armed .fb-window {
+    transition-delay: 120ms;
+  }
+  html.fb-armed .fb-window:not(.fb-on) {
+    opacity: 0;
+    transform: translateY(48px) scale(0.96);
+  }
+
+  /* Lists and grids: one child after another. */
+  html.fb-armed .fb-stagger > * {
+    transition-delay: calc(var(--i, 0) * 90ms);
+  }
+  html.fb-armed .fb-stagger:not(.fb-on) > * {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  /* Timeline: bars draw left to right, then the links and milestone appear. */
+  html.fb-armed .fb-bar {
+    transform-origin: left center;
+    transition: transform 0.7s var(--fb-ease);
+    transition-delay: calc(450ms + var(--b, 0) * 140ms);
+  }
+  html.fb-armed .fb-window:not(.fb-on) .fb-bar {
+    transform: scaleX(0);
+  }
+  html.fb-armed .fb-late {
+    transition-delay: 1400ms;
+  }
+  html.fb-armed .fb-window:not(.fb-on) .fb-late {
+    opacity: 0;
+  }
+
+  /* Minutes: the highlight sweeps, then the found items slide in and tick. */
+  html.fb-armed .fb-mark {
+    background-color: transparent !important;
+    background-image: linear-gradient(rgb(249 115 22 / 0.2), rgb(249 115 22 / 0.2));
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    transition: background-size 0.9s var(--fb-ease) 400ms;
+  }
+  html.fb-armed .fb-window:not(.fb-on) .fb-mark {
+    background-size: 0% 100%;
+  }
+  html.fb-armed .fb-items > * {
+    transition-delay: calc(900ms + var(--i, 0) * 160ms);
+  }
+  html.fb-armed .fb-window:not(.fb-on) .fb-items > * {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  html.fb-armed .fb-check {
+    transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1);
+    transition-delay: calc(1250ms + var(--i, 0) * 160ms);
+  }
+  html.fb-armed .fb-window:not(.fb-on) .fb-check {
+    transform: scale(0);
+  }
+}

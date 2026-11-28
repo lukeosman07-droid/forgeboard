@@ -27,8 +27,8 @@ const BLURBS: Record<PaidPlan, string> = {
 };
 
 const HIGHLIGHTS: Record<PaidPlan, string[]> = {
-  starter: ["Tasks, decisions and risks", "Table, board, calendar and timeline", "AI from pasted notes", "Email support"],
-  team: ["Everything in Starter", "AI from files and email, Ask Forgeboard", "RFI and submittal registers", "Task dependencies"],
+  starter: ["Tasks, decisions and risks", "Table, board, calendar and timeline", "Meeting notes to tasks", "Email support"],
+  team: ["Everything in Starter", "RFI and submittal registers", "Task dependencies", "Read minutes from files and email"],
   business: ["Everything in Team", "Workload across projects", "Custom templates", "Scheduled reports, priority support"],
 };
 
@@ -135,12 +135,12 @@ function PlanCard({ plan, interval, billing, featured }: { plan: PaidPlan; inter
 
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border p-8 ${
-        featured ? "border-orange-500/60 bg-slate-900 shadow-xl shadow-orange-500/10" : "border-white/10 bg-slate-900/60"
+      className={`relative flex flex-col rounded-xl border p-8 ${
+        featured ? "border-orange-500/50 bg-slate-900" : "border-white/10 bg-slate-900/60"
       }`}
     >
       {featured && (
-        <span className="absolute -top-3 left-8 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-slate-950">Most popular</span>
+        <span className="absolute -top-3 left-8 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold text-slate-950">Recommended</span>
       )}
       <h3 className="text-xl font-semibold text-white">{PLAN_LABELS[plan]}</h3>
       <p className="mt-1 text-slate-400">{BLURBS[plan]}</p>
@@ -154,7 +154,7 @@ function PlanCard({ plan, interval, billing, featured }: { plan: PaidPlan; inter
         {interval === "month" ? "Per firm, billed monthly" : `${formatPrice(PRICES[plan].year)} billed yearly, per firm`}
       </p>
       <ul className="mt-8 flex-1 space-y-3">
-        {[`Up to ${limits.seats} people (guests free)`, `${limits.aiRuns.toLocaleString()} AI runs a month`, `${formatBytes(limits.storageBytes)} of files`, ...HIGHLIGHTS[plan]].map(
+        {[`Up to ${limits.seats} people (guests free)`, `${formatBytes(limits.storageBytes)} of files`, ...HIGHLIGHTS[plan], `${limits.aiRuns.toLocaleString()} AI runs a month`].map(
           (f) => (
             <li key={f} className="flex items-center gap-3 text-slate-300">
               <Icon name="check" className="h-5 w-5 shrink-0 text-orange-400" />

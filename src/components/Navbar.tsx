@@ -4,7 +4,7 @@ import { useState } from "react";
 import Logo from "./Logo";
 import { navLinks } from "@/lib/site";
 
-// `auth` and `mobileAuth` are the server-rendered Log in / Get Started / Dashboard buttons.
+// `auth` and `mobileAuth` are the server-rendered Log in / Start trial / Dashboard buttons.
 export default function Navbar({ auth, mobileAuth }: { auth: React.ReactNode; mobileAuth: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);

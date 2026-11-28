@@ -1,9 +1,9 @@
 // Shared site settings. Change values here and they update everywhere.
 export const site = {
   name: "Forgeboard",
-  title: "Forgeboard – The organized workspace for engineering teams",
+  title: "Forgeboard – Project control for engineering and construction teams",
   description:
-    "Forgeboard is work management for engineering teams: table, board, calendar and timeline views, with AI that plans projects, turns meeting notes into tasks, and writes status reports.",
+    "Forgeboard runs the paperwork of engineering projects in one system: tasks and schedules with dependencies, RFI and submittal logs, design reviews, decisions, files and team workload.",
   builder: "Luke Osman",
   year: 2026,
 };
@@ -17,14 +17,8 @@ export const contact = {
 };
 
 export const navLinks = [
-  { label: "Features", href: "/#features" },
-  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Product", href: "/#workflows" },
+  { label: "Collaboration", href: "/#team" },
+  { label: "Security", href: "/#security" },
   { label: "Pricing", href: "/#pricing" },
-];
-
-export const legalLinks = [
-  { label: "Terms", href: "/terms" },
-  { label: "Privacy", href: "/privacy" },
-  { label: "Security", href: "/security" },
-  { label: "Contact", href: "/contact" },
 ];
