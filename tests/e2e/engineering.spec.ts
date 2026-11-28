@@ -100,7 +100,12 @@ test.beforeEach(async ({ page }) => {
 
 test("an RFI is created from an extracted question in two clicks", async ({ page }) => {
   await page.goto(`/w/${slug}/projects/${projectId}`);
-  await page.getByRole("tab", { name: "Decisions & Risks" }).click(); // 1
+  const logTab = page.getByRole("tab", { name: "Decisions & Risks" });
+  // Retry until the page is interactive: clicks before hydration do nothing.
+  await expect(async () => {
+    await logTab.click({ timeout: 2_000 }); // 1
+    await expect(logTab).toHaveAttribute("aria-selected", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 30_000 });
   await page.getByRole("button", { name: "Create RFI" }).click(); // 2
 
   await expect(page.getByRole("tab", { name: "RFIs" })).toHaveAttribute("aria-selected", "true");
@@ -125,6 +130,8 @@ test("moving a predecessor's due date flags its successor", async ({ page }) => 
   // Push the survey past the day the design starts.
   await page.goto(`/w/${slug}/projects/${projectId}?view=table&task=${ids["Survey the outfall"]}`);
   const drawer = page.getByRole("dialog", { name: "Task details" });
+  // The History list loads once the panel is interactive.
+  await expect(drawer.getByRole("list", { name: "History" })).toBeVisible({ timeout: 15_000 });
   await drawer.getByLabel("Due date").fill(inDays(15));
   await drawer.getByRole("button", { name: "Close", exact: true }).click();
 
