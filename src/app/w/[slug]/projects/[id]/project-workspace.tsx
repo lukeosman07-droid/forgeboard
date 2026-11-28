@@ -229,6 +229,7 @@ function Workspace({
             onOpen={showRfi}
             seed={rfiSeed}
             onSeedUsed={clearSeed}
+            questions={logItems.filter((i) => i.type === "question" && i.status !== "done" && !i.rfi_id)}
           />
         )}
         {view === "submittals" && (

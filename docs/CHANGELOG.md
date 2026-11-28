@@ -25,7 +25,7 @@ Projects now have RFI and submittal registers, milestones and design reviews, an
 
 **App**
 
-- **RFIs tab.** A list with status filters and days open. The side panel has the response, linked tasks, a "follow-up task" button and files. On Decisions & Risks, each question has a **Create RFI** button: one click makes the RFI and opens it. Afterwards the button reads "Open RFI-00N".
+- **RFIs tab.** A list with status filters and days open. The side panel has the response, linked tasks, a "follow-up task" button and files. Open questions from your notes that have no RFI yet are listed at the top of the RFIs tab, each with a **Create RFI** button: one click makes the RFI and opens it. The same button is on each question under Decisions & Risks, where it then reads "Open RFI-00N".
 - **Submittals tab.** A list and side panel showing the action, "Log revision N+1", revision history, linked tasks and files.
 - **Logs.** Both registers export as CSV and PDF from `/w/<slug>/projects/<id>/registers/rfis` (or `submittals`) with `?format=csv|pdf`. The PDF is landscape and multi-page, made by a small built-in writer with no new package.
 - **Milestones & Reviews tab.** Add, move and finish milestones. For a review, add comments, set each one's disposition, and close or reopen the review (Close stays greyed out until the review is ready).

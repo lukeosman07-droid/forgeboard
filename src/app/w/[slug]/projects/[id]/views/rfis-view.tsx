@@ -10,9 +10,9 @@ import type { RfiDraft } from "@/lib/ai/register-schema";
 import { formatDate, useToday } from "@/lib/dates";
 import { displayName } from "@/lib/people";
 import { RFI_STATUS, RFI_STATUSES, daysOpen, rfiNumber, rfiOverdue, type Rfi, type RfiStatus } from "@/lib/registers";
-import type { Attachment } from "@/lib/types";
+import type { Attachment, Item } from "@/lib/types";
 import { STATUS_BY_ID } from "@/lib/work";
-import { createLinkedTask, createRfi, deleteRfi, getRfiDetail, updateRfi, type RfiDetail } from "@/server/registers";
+import { createLinkedTask, createRfi, deleteRfi, getRfiDetail, rfiFromItem, updateRfi, type RfiDetail } from "@/server/registers";
 import type { RfiPatch } from "@/server/schemas";
 import { BlurField, ErrorNote, ExportLinks, SidePanel, UpgradeCard, input, label, primary, secondary } from "./register-ui";
 
@@ -30,9 +30,12 @@ export default function RfisView({
   onOpen,
   seed,
   onSeedUsed,
+  questions = [],
 }: {
   projectId: string;
   rfis: Rfi[];
+  /** Open questions from the project's notes that have no RFI yet. */
+  questions?: Item[];
   registers: boolean;
   openId: string | null;
   onOpen: (id: string | null) => void;
@@ -83,6 +86,8 @@ export default function RfisView({
         </div>
         <ExportLinks projectId={projectId} kind="rfis" today={today} />
       </div>
+
+      {canEdit && registers && <QuestionsToRaise questions={questions} onOpen={onOpen} />}
 
       {!registers && <p className="text-sm text-slate-500">Your plan no longer includes registers, so these RFIs are read-only. You can still export them.</p>}
 
@@ -457,5 +462,44 @@ function RfiPanel({ rfiId, listRfi, registers, onClose }: { rfiId: string; listR
         <Attachments projectId={rfi.project_id} rfiId={rfi.id} files={files} setFiles={setFiles} canEdit={editable} />
       </div>
     </SidePanel>
+  );
+}
+
+// Questions the AI pulled from notes (or added by hand) that have no RFI yet:
+// one click raises the RFI and opens it.
+function QuestionsToRaise({ questions, onOpen }: { questions: Item[]; onOpen: (id: string | null) => void }) {
+  const [creating, setCreating] = useState<string | null>(null);
+  const [error, setError] = useState<string>();
+  const [, startTransition] = useTransition();
+  if (questions.length === 0) return null;
+  return (
+    <section aria-label="Open questions without an RFI" className="rounded-xl border border-white/10 bg-slate-900/40 p-3">
+      <h3 className="mb-2 text-sm font-semibold text-slate-200">Open questions from your notes</h3>
+      <ErrorNote error={error} />
+      <ul className="space-y-1">
+        {questions.map((q) => (
+          <li key={q.id} className="flex items-center gap-3 text-sm">
+            <span className="min-w-0 flex-1 truncate text-slate-300">{q.title}</span>
+            <button
+              type="button"
+              disabled={creating !== null}
+              onClick={() => {
+                setCreating(q.id);
+                setError(undefined);
+                startTransition(async () => {
+                  const result = await rfiFromItem(q.id);
+                  setCreating(null);
+                  if (result.error) setError(result.error);
+                  else if (result.id) onOpen(result.id);
+                });
+              }}
+              className="shrink-0 rounded-md border border-orange-500/40 px-2 py-1 text-xs font-medium text-orange-300 hover:bg-orange-500/10 disabled:opacity-50"
+            >
+              {creating === q.id ? "Creating…" : "Create RFI"}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

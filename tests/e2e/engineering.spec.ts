@@ -100,15 +100,16 @@ test.beforeEach(async ({ page }) => {
 
 test("an RFI is created from an extracted question in two clicks", async ({ page }) => {
   await page.goto(`/w/${slug}/projects/${projectId}`);
-  const logTab = page.getByRole("tab", { name: "Decisions & Risks" });
+  const rfiTab = page.getByRole("tab", { name: "RFIs" });
   // Retry until the page is interactive: clicks before hydration do nothing.
   await expect(async () => {
-    await logTab.click({ timeout: 2_000 }); // 1
-    await expect(logTab).toHaveAttribute("aria-selected", "true", { timeout: 1_000 });
+    await rfiTab.click({ timeout: 2_000 }); // 1
+    await expect(rfiTab).toHaveAttribute("aria-selected", "true", { timeout: 1_000 });
   }).toPass({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Create RFI" }).click(); // 2
+  const questions = page.getByRole("region", { name: "Open questions without an RFI" });
+  await expect(questions).toContainText(QUESTION);
+  await questions.getByRole("button", { name: "Create RFI" }).click(); // 2
 
-  await expect(page.getByRole("tab", { name: "RFIs" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("days-open")).toHaveText("0 days open");
   await expect(page.getByText("RFI-001").first()).toBeVisible();
   await expect(page).toHaveURL(/view=rfis&rfi=/);
@@ -117,7 +118,9 @@ test("an RFI is created from an extracted question in two clicks", async ({ page
   expect(rfi).toMatchObject({ subject: QUESTION, status: "open", source_item_id: ids[QUESTION] });
 
   // The question now links to its RFI instead of offering a new one.
+  await expect(questions).toHaveCount(0);
   await page.getByRole("tab", { name: "Decisions & Risks" }).click();
+  await page.getByRole("button", { name: /^Risks & Questions/ }).click();
   await expect(page.getByRole("button", { name: "Open RFI-001" })).toBeVisible();
 });
 
