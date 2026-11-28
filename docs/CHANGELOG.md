@@ -52,6 +52,13 @@ Projects can now hold files, and the AI reads PDFs, Word files, emails and meeti
 - **Previews** are images and PDFs in the browser. Word, Excel, DWG and DXF files download.
 - **The merge pass is plain code, not a second AI call.** It's cheaper and predictable; an AI merge can come later if duplicates slip through.
 
+### Deployed (Nov 27, 2026)
+
+1. Saved a copy of every live table (`backups/pre-phase-4-...json`, not committed).
+2. Ran the migration on the live database after checking its SHA-256 against the file CI tested. All 5 notes became documents, the 43 tasks that came from them still point at them, and the private `attachments` bucket exists. Then merged `phase-4` into `main`; Vercel deployed.
+3. Checked on the live site: AI Capture shows its three tabs, the Documents list shows the old notes, and on Starter the file and Ask features show the upgrade message. `/api/inbound-email` answers 503 until it's set up, and file and Ask routes refuse signed-out calls.
+4. CI on `phase-4`: lint, typecheck, 100 unit tests, 116 database tests and 32 browser tests pass. CI's test mailbox moved to port 54334, because the runner now has 54324 in use (that had also failed `main`'s last run).
+
 ### Still needs Luke
 
 1. **Inbound email (optional).** Add a domain or subdomain to Cloudflare, turn on Email Routing, and follow [docs/INBOUND_EMAIL.md](INBOUND_EMAIL.md). Then set `INBOUND_EMAIL_SECRET` and `INBOUND_EMAIL_DOMAIN` in Vercel and redeploy.
