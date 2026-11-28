@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useWorkspace } from "@/components/app/workspace-context";
+import { rfiNumber, type Rfi } from "@/lib/registers";
+import { rfiFromItem } from "@/server/registers";
 import { createItem } from "@/server/tasks";
 import { useToday } from "@/lib/dates";
 import type { Item, ItemType } from "@/lib/types";
@@ -26,8 +29,36 @@ const TABS: { id: Tab; label: string; types: ItemType[]; empty: string }[] = [
   },
 ];
 
-export default function LogView({ projectId, items }: { projectId: string; items: Item[] }) {
+export default function LogView({
+  projectId,
+  items,
+  rfis = [],
+  registers = false,
+  onOpenRfi,
+}: {
+  projectId: string;
+  items: Item[];
+  rfis?: Rfi[];
+  /** The plan includes RFIs: questions get a "Create RFI" button. */
+  registers?: boolean;
+  onOpenRfi?: (rfiId: string) => void;
+}) {
   const today = useToday();
+  const { canEdit } = useWorkspace();
+  const [creating, setCreating] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const rfiFor = (item: Item) => (item.rfi_id ? rfis.find((r) => r.id === item.rfi_id) : undefined);
+  const createRfi = (item: Item) => {
+    const existing = rfiFor(item);
+    if (existing) return onOpenRfi?.(existing.id);
+    setCreating(item.id);
+    startTransition(async () => {
+      const result = await rfiFromItem(item.id);
+      setCreating(null);
+      if (result.error) setError(result.error);
+      else if (result.id) onOpenRfi?.(result.id);
+    });
+  };
   const [tab, setTab] = useState<Tab>("decisions");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string>();
@@ -94,7 +125,18 @@ export default function LogView({ projectId, items }: { projectId: string; items
       ) : (
         <ul className="space-y-2">
           {visible.map((item) => (
-            <ItemRow key={item.id} item={item} today={today} editTypes={current.types} onError={setError} />
+            <ItemRow
+              key={item.id}
+              item={item}
+              today={today}
+              editTypes={current.types}
+              onError={setError}
+              rfi={
+                item.type === "question" && registers && onOpenRfi && (canEdit || rfiFor(item))
+                  ? { label: rfiFor(item) ? rfiNumber(rfiFor(item)!.number) : null, onClick: () => createRfi(item), pending: creating === item.id }
+                  : undefined
+              }
+            />
           ))}
         </ul>
       )}

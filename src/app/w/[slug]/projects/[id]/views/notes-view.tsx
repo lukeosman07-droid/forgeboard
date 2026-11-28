@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/dates";
 import { fileHref } from "@/lib/files";
 import type { Item, ProjectDocument } from "@/lib/types";
 import AiExtractPanel from "../ai-extract-panel";
+import SelectionAction from "../selection-action";
 import type { Usage } from "../project-workspace";
 
 const ORIGIN: Record<ProjectDocument["origin"], string> = { paste: "Pasted notes", upload: "File", email: "Email" };
@@ -18,12 +19,15 @@ export default function NotesView({
   notes,
   items,
   onSaved,
+  onDraftRfi,
 }: {
   projectId: string;
   usage: Usage;
   notes: ProjectDocument[];
   items: Item[];
   onSaved: () => void;
+  /** Set when the plan has registers: highlighting text offers to draft an RFI. */
+  onDraftRfi?: (passage: string) => void;
 }) {
   const { limits, canEdit } = useWorkspace();
   // The document a citation link points at (?doc=<id>), read after hydration.
@@ -87,9 +91,18 @@ export default function NotesView({
                     {note.raw_text && (
                       <details open={focus === note.id} className="w-full">
                         <summary className="cursor-pointer text-sm text-orange-400 hover:text-orange-300">Show text</summary>
-                        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-4 font-sans text-sm text-slate-300">
-                          {note.raw_text}
-                        </pre>
+                        {onDraftRfi ? (
+                          <SelectionAction onAction={onDraftRfi}>
+                            <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-4 font-sans text-sm text-slate-300">
+                              {note.raw_text}
+                            </pre>
+                            <p className="mt-1 text-xs text-slate-500">Highlight a question to draft an RFI from it.</p>
+                          </SelectionAction>
+                        ) : (
+                          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-950/60 p-4 font-sans text-sm text-slate-300">
+                            {note.raw_text}
+                          </pre>
+                        )}
                       </details>
                     )}
                   </div>

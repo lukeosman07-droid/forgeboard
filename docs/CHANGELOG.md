@@ -2,6 +2,79 @@
 
 One entry per phase of [SPEC.md](SPEC.md): what shipped, what was skipped and why, and what still needs Luke.
 
+## Phase 5: Engineering depth (Nov 27, 2026)
+
+Projects now have RFI and submittal registers, milestones and design reviews, and tasks can wait on each other. Change a date and anything that waits on it is flagged right away. Tasks can be filtered, sorted and saved as named views you can link to. A workload page shows who has what due each week. There are four new built-in templates, and you can save any project as a template. Two new AI helpers draft an RFI from a highlighted question and check a submittal against a spec section.
+
+### Shipped
+
+**Database** (`supabase/migrations/20261130000000_engineering.sql`)
+
+- **RFIs.** Numbered per project (RFI-001, ...). Status goes draft → open → answered → closed, and the database records when each step happened, so days open can't be faked. Ball in court is a member or a named outside party. Each RFI can point to the question it came from.
+- **Submittals.** Numbered per project, with spec section, submitted by, reviewer, received, due and returned dates, and an action: pending, approved, approved as noted, revise and resubmit, or rejected. Only "revise and resubmit" or "rejected" can start the next revision. The old revision is then kept in `submittal_revisions`, and the new one starts as pending.
+- **Milestones and design reviews.** A review can belong to a milestone. Its comments are tasks with a disposition: pending, incorporate, reject or defer. A review closes only when every comment has a disposition and every comment marked "incorporate" is done. Comments stay out of the task views and workload until someone marks them "incorporate".
+- **Dependencies.** `item_dependencies` links finish-to-start pairs in one project and refuses loops. `dependency_conflicts()` lists tasks that start before a task they wait on is due.
+- **Saved views** (private or shared with the project) and **custom templates** (per workspace).
+- **Links.** Tasks link to an RFI or a submittal, and files attach to them too.
+- **`workload()`** counts open tasks per person: overdue, each week and no date.
+- **Search and Ask** now include RFIs and submittals.
+- **Plans.** Each plan check runs in the database:
+  - RFIs, submittals and dependencies need the registers feature (trial, Team, Business).
+  - Workload and custom templates need the workload feature (trial, Business).
+  - Milestones, reviews and saved views are on every plan.
+
+**App**
+
+- **RFIs tab.** A list with status filters and days open. The side panel has the response, linked tasks, a "follow-up task" button and files. On Decisions & Risks, each question has a **Create RFI** button: one click makes the RFI and opens it. Afterwards the button reads "Open RFI-00N".
+- **Submittals tab.** A list and side panel showing the action, "Log revision N+1", revision history, linked tasks and files.
+- **Logs.** Both registers export as CSV and PDF from `/w/<slug>/projects/<id>/registers/rfis` (or `submittals`) with `?format=csv|pdf`. The PDF is landscape and multi-page, made by a small built-in writer with no new package.
+- **Milestones & Reviews tab.** Add, move and finish milestones. For a review, add comments, set each one's disposition, and close or reopen the review (Close stays greyed out until the review is ready).
+- **Dependencies.** In the task panel, "Waits on" and "Needed by" let you add a link (loops are blocked) or remove one. A task that starts before what it waits on is due shows "⚠ Conflict" in the table, an amber dashed arrow on the timeline, and a banner above the views. The check runs in the browser, so moving a date flags the tasks that wait on it at once.
+- **Timeline** draws milestones as diamonds and dependencies as arrows.
+- **Filters and sorting** on Table, Board, Calendar and Timeline:
+  - search, owner, status, priority, due date, section and hide done;
+  - sort by any column, ascending or descending.
+  - Filters live in the URL (`?status=open,stuck&sort=due`), so a link brings them back.
+- **Saved views.** Under the "Views" menu you can save, open, share, copy a link to or delete a view.
+- **Workload page** (`/w/<slug>/workload`, in the sidebar). People down the side; overdue, the next 4 to 12 weeks and no date across. Busy weeks are shaded.
+- **Templates.** Four new built-ins: MEP design, structural design, site and civil, and new product introduction (NPI).
+  - "Save as template" in the project menu stores a project's sections and tasks, with dates kept as offsets.
+  - Your templates show first in New project, marked "Yours", and you can delete them.
+- **AI helpers**:
+  - **Draft RFI.** Highlight a question in a document's text and choose "Draft RFI from selection", or paste a passage in the New RFI form. The AI fills in subject, question, a suggested answer and references, and you edit before saving.
+  - **Find deviations.** On a submittal with a PDF or Word file attached, paste the spec section. The AI lists each deviation (required, submitted, severity, page) and anything missing. Tick the ones you agree with and "Add confirmed items to review notes". Nothing is saved without you.
+  - Both count as AI runs. Find deviations needs file AI (Team and Business).
+- **Export** (workspace) adds rfis.csv, submittals.csv, milestones.csv, reviews.csv and dependencies.csv.
+- **Demo seed.** Pump Station Retrofit now has 2 RFIs, 3 submittals (one on revision 1), 4 milestones, a design review with 4 comments, 5 dependencies (one in conflict) and a saved view. The generator question is left without an RFI so "Create RFI" shows.
+
+**Tests**
+
+- `tests/unit/engineering.test.ts`: filters (URL round trip, apply, sort), conflicts and loops, numbering, days open, overdue, log rows, the PDF writer (wrapping, pages, escaping), the workload grid, and every template checked against the plan schema.
+- `tests/db/registers.test.ts`: numbering and status dates, who can edit, guests, plan gating, the submittal revision flow, review close-out, dependency loops and conflicts, saved view privacy, templates, and `workload()` against a hand count.
+- `tests/e2e/engineering.spec.ts` covers the acceptance criteria:
+  - an RFI from a question in two clicks, showing days open;
+  - moving a predecessor's due date flags its successor;
+  - a saved view reloads from its URL with the same filters;
+  - the workload page matches a hand count.
+
+### Skipped or deferred
+
+- **No drag-to-reorder while sorted.** On Table and Board, a sort other than the default turns dragging off so the sorted order stays put.
+- **Dependencies are finish-to-start only.** No lag days, start-to-start or auto-rescheduling of successors. Conflicts are flagged, not fixed.
+- **Find deviations reads one attached file at a time**, up to 300,000 characters of text, or a scanned PDF up to 20 MB.
+- **The RFI and submittal PDFs** use the built-in Helvetica font, so characters outside Western European text show as "?".
+
+### Decisions for Luke
+
+- Review comments are tasks with a disposition. Marking one "incorporate" turns it into real work in every task view and in the workload page.
+- Days open counts from the day an RFI leaves draft, and stops when it's answered or closed.
+- A saved view stores its query string. Shared views show for everyone on the project; private ones only for you.
+- Custom templates sit with workload on Business (and the trial). Team gets registers but not workload, as in the spec's pricing table.
+
+### Still needs Luke
+
+- Nothing to set up. No new env vars or packages.
+
 ## Phase 4: Files and AI capture (Nov 27, 2026)
 
 Projects can now hold files, and the AI reads PDFs, Word files, emails and meeting transcripts, not just pasted text. Every task it finds keeps the sentence it came from and the page, and opens the file at that page. Each project can have an email address to forward minutes to. Ask Forgeboard answers questions about your projects with sources. Managers can have a weekly AI report written and emailed every Monday, with a read-only link to share.

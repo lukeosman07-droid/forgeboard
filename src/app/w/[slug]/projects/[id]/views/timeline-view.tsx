@@ -1,25 +1,34 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useProjectExtras } from "@/components/work/project-extras";
 import { useTaskStore } from "@/components/work/task-store";
 import { Avatar, Icon } from "@/components/work/ui";
 import { formatDate, useToday } from "@/lib/dates";
 import type { Project, Section, Task } from "@/lib/types";
+import { findConflicts } from "@/lib/dependencies";
 import { STATUS_BY_ID, addDays, daysBetween, startOfWeek, weekdayShort } from "@/lib/work";
 import { groupBySection } from "./table-view";
 
 // Gantt-style timeline. Drag a bar to move a task; drag its right edge to
-// change how long it runs.
+// change how long it runs. Milestones show as diamonds; arrows link a task to
+// the ones that wait on it, and turn amber when the dates clash.
 
 const DAY = 30; // px per day
 const WEEKS = 10;
 const NAME_COL = "w-64";
+const NAME_PX = 256;
+const GROUP_H = 32;
+const ROW_H = 40;
 
 type Drag = { id: string; mode: "move" | "resize"; startX: number; delta: number };
 
-export default function TimelineView({ sections, tasks }: { project: Project; sections: Section[]; tasks: Task[] }) {
+export default function TimelineView({ sections, tasks, sorted = false }: { project: Project; sections: Section[]; tasks: Task[]; sorted?: boolean }) {
   const today = useToday();
-  const { update, openTask } = useTaskStore();
+  const { update, openTask, tasks: allTasks } = useTaskStore();
+  const extras = useProjectExtras();
+  const milestones = extras?.milestones ?? [];
+  const dependencies = extras?.dependencies ?? [];
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [drag, setDrag] = useState<Drag | null>(null);
   const moved = useRef(false);
@@ -29,8 +38,10 @@ export default function TimelineView({ sections, tasks }: { project: Project; se
   const start = addDays(startOfWeek(today), (offsetWeeks - 1) * 7);
   const days = Array.from({ length: WEEKS * 7 }, (_, i) => addDays(start, i));
   const end = days[days.length - 1];
-  const groups = groupBySection(sections, tasks);
+  const groups = groupBySection(sections, tasks, sorted);
   const scheduled = tasks.filter((t) => t.start_date || t.due_date).length;
+  const conflictIds = new Set(findConflicts(allTasks, dependencies).map((c) => c.dependencyId));
+  const flagged = new Set(findConflicts(allTasks, dependencies).map((c) => c.successor.id));
 
   const span = (t: Task) => {
     let from = t.start_date ?? t.due_date!;
@@ -65,6 +76,25 @@ export default function TimelineView({ sections, tasks }: { project: Project; se
   };
 
   const todayLeft = daysBetween(start, today) * DAY;
+
+  // Where each visible bar sits, for drawing dependency arrows.
+  const bars = new Map<string, { y: number; left: number; right: number }>();
+  let y = 0;
+  for (const group of groups) {
+    y += GROUP_H;
+    for (const t of group.tasks) {
+      if (t.start_date || t.due_date) {
+        const { from, to } = span(t);
+        bars.set(t.id, { y: y + ROW_H / 2, left: daysBetween(start, from) * DAY, right: daysBetween(start, to) * DAY + DAY });
+      }
+      y += ROW_H;
+    }
+  }
+  const bodyHeight = y;
+  const arrows = dependencies
+    .map((d) => ({ d, from: bars.get(d.predecessor_id), to: bars.get(d.successor_id) }))
+    .filter((a): a is { d: (typeof dependencies)[number]; from: { y: number; left: number; right: number }; to: { y: number; left: number; right: number } } => !!a.from && !!a.to);
+  const shownMilestones = milestones.filter((m) => m.due_on >= start && m.due_on <= end);
 
   return (
     <div>
@@ -108,15 +138,66 @@ export default function TimelineView({ sections, tasks }: { project: Project; se
             </div>
           </div>
 
+          {/* Milestones: a diamond in the header and a dashed line down the chart */}
+          {shownMilestones.map((m) => {
+            const x = daysBetween(start, m.due_on) * DAY + DAY / 2;
+            return (
+              <div key={m.id} className="pointer-events-none absolute bottom-0 top-0 z-10" style={{ left: `calc(16rem + ${x}px)` }}>
+                <div className={`h-full border-l border-dashed ${m.done_at ? "border-emerald-400/50" : "border-violet-400/60"}`} />
+                <div
+                  title={`Milestone: ${m.name} (${formatDate(m.due_on)})`}
+                  className={`pointer-events-auto absolute -left-1.5 top-1 h-3 w-3 rotate-45 ${m.done_at ? "bg-emerald-400" : "bg-violet-400"}`}
+                />
+              </div>
+            );
+          })}
+
           {/* Today line */}
           {todayLeft >= 0 && todayLeft < days.length * DAY && (
             <div className="pointer-events-none absolute bottom-0 top-0 z-10 w-0.5 bg-orange-500/70" style={{ left: `calc(16rem + ${todayLeft + DAY / 2}px)` }} />
           )}
 
+          <div className="relative">
+          {arrows.length > 0 && (
+            <svg
+              aria-hidden
+              className="pointer-events-none absolute top-0 z-[5]"
+              style={{ left: NAME_PX, width: days.length * DAY, height: bodyHeight }}
+            >
+              <defs>
+                <marker id="dep-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                  <path d="M0,0 L8,4 L0,8 z" fill="#94a3b8" />
+                </marker>
+                <marker id="dep-arrow-bad" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                  <path d="M0,0 L8,4 L0,8 z" fill="#f59e0b" />
+                </marker>
+              </defs>
+              {arrows.map(({ d, from, to }) => {
+                const bad = conflictIds.has(d.id);
+                const x1 = from.right;
+                const x2 = to.left;
+                const mid = Math.max(x1 + 8, Math.min(x2 - 8, x1 + 12));
+                return (
+                  <path
+                    key={d.id}
+                    data-dependency={d.id}
+                    data-conflict={bad || undefined}
+                    d={`M${x1},${from.y} H${mid} V${to.y} H${x2}`}
+                    fill="none"
+                    stroke={bad ? "#f59e0b" : "#94a3b8"}
+                    strokeWidth={bad ? 2 : 1.25}
+                    strokeDasharray={bad ? "4 3" : undefined}
+                    markerEnd={`url(#${bad ? "dep-arrow-bad" : "dep-arrow"})`}
+                    opacity={0.85}
+                  />
+                );
+              })}
+            </svg>
+          )}
           {groups.map((group) => (
             <div key={group.id ?? "none"}>
-              <div className="flex border-b border-white/5 bg-slate-900/60">
-                <div className={`${NAME_COL} sticky left-0 z-10 shrink-0 border-r border-white/10 bg-slate-900 px-4 py-1.5 text-sm font-semibold ${group.color.text}`}>
+              <div className="flex h-8 border-b border-white/5 bg-slate-900/60">
+                <div className={`${NAME_COL} sticky left-0 z-10 flex shrink-0 items-center border-r border-white/10 bg-slate-900 px-4 text-sm font-semibold ${group.color.text}`}>
                   {group.name}
                 </div>
                 <div className="flex-1" />
@@ -139,6 +220,11 @@ export default function TimelineView({ sections, tasks }: { project: Project; se
                     >
                       <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} />
                       <span className="truncate">{t.title}</span>
+                      {flagged.has(t.id) && (
+                        <span data-conflict className="ml-auto shrink-0 text-amber-400" title="Starts before a task it waits on is due">
+                          ⚠
+                        </span>
+                      )}
                     </button>
                     <div className="relative flex-1">
                       {visible ? (
@@ -186,8 +272,20 @@ export default function TimelineView({ sections, tasks }: { project: Project; se
               })}
             </div>
           ))}
+          </div>
         </div>
       </div>
+      {(milestones.length > 0 || dependencies.length > 0) && (
+        <p className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+          <span className="inline-block h-2.5 w-2.5 rotate-45 bg-violet-400" /> Milestone
+          {dependencies.length > 0 && (
+            <>
+              <span className="ml-3 inline-block h-0.5 w-5 bg-slate-400" /> Waits on
+              <span className="ml-3 inline-block h-0.5 w-5 bg-amber-500" /> Date conflict
+            </>
+          )}
+        </p>
+      )}
     </div>
   );
 }

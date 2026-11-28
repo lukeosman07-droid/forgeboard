@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { PlanOutput } from "@/lib/ai/assist-schema";
 import { Icon } from "@/components/work/ui";
 import { localToday } from "@/lib/dates";
-import { TEMPLATES } from "@/lib/templates";
+import { TEMPLATES, type Template } from "@/lib/templates";
 import type { ProjectColor } from "@/lib/types";
 import { COLOR_NAMES, colorOf } from "@/lib/work";
+import { deleteTemplate, listTemplates } from "@/server/engineering";
 import { createProject } from "@/server/projects";
 import { useWorkspace } from "./workspace-context";
 import type { ProjectPlan } from "@/server/schemas";
@@ -66,8 +67,29 @@ export default function NewProjectButton({ variant = "primary" }: { variant?: "p
 
 function NewProjectForm({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const { slug } = useWorkspace();
+  const { slug, limits } = useWorkspace();
   const [mode, setMode] = useState<Mode>("blank");
+  // The workspace's own templates (Business plan), saved from projects.
+  const [custom, setCustom] = useState<Template[]>([]);
+  useEffect(() => {
+    if (!limits.features.workload) return;
+    let live = true;
+    listTemplates(slug).then((rows) => {
+      if (!live) return;
+      setCustom(
+        rows.map((r) => ({
+          id: `custom:${r.id}`,
+          name: r.name,
+          blurb: r.description || "Saved from one of your projects.",
+          color: r.color,
+          plan: r.plan as ProjectPlan,
+        })),
+      );
+    });
+    return () => {
+      live = false;
+    };
+  }, [slug, limits.features.workload]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState<ProjectColor>("orange");
@@ -77,7 +99,8 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<{ message: string; upgrade?: boolean }>();
   const [pending, startTransition] = useTransition();
 
-  const template = TEMPLATES.find((t) => t.id === templateId)!;
+  const allTemplates = [...custom, ...TEMPLATES];
+  const template = allTemplates.find((t) => t.id === templateId) ?? TEMPLATES[0];
 
   async function generate() {
     setError(undefined);
@@ -220,7 +243,7 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
 
         {mode === "template" && (
           <div className="grid gap-2 sm:grid-cols-2">
-            {TEMPLATES.map((t) => (
+            {allTemplates.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -238,8 +261,27 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
                   {t.name}
                 </span>
                 <span className="mt-1 block text-xs text-slate-400">{t.blurb}</span>
-                <span className="mt-2 block text-xs text-slate-500">
+                <span className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                  {t.id.startsWith("custom:") && <span className="rounded bg-white/10 px-1.5 text-slate-300">Yours</span>}
                   {t.plan.sections.length} sections · {planTaskCount(t.plan)} tasks
+                  {t.id.startsWith("custom:") && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete the template "${t.name}"? Projects made from it stay as they are.`)) return;
+                        void deleteTemplate(t.id.slice(7)).then((r) => {
+                          if (r.error) setError({ message: r.error });
+                          else setCustom((list) => list.filter((x) => x.id !== t.id));
+                        });
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.click()}
+                      className="ml-auto text-slate-500 hover:text-red-300"
+                    >
+                      Delete
+                    </span>
+                  )}
                 </span>
               </button>
             ))}

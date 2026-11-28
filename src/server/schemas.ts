@@ -122,3 +122,73 @@ export const Email = z.email("That email address doesn't look right.").max(320);
 export function firstIssue(error: z.ZodError) {
   return error.issues[0]?.message ?? "Please check the form.";
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5: registers, reviews, dependencies, saved views, templates
+// ---------------------------------------------------------------------------
+
+export const RfiStatus = z.enum(["draft", "open", "answered", "closed"]);
+
+export const RfiInputSchema = z.object({
+  subject: z.string().trim().min(1, "Give the RFI a subject.").max(300, "Subject is too long (300 characters max)."),
+  question: z.string().trim().max(10000, "The question is too long.").optional(),
+  response: optionalText(10000),
+  status: RfiStatus.optional(),
+  /** A member who has to answer, or a plain name (an outside party). */
+  ball_in_court_id: Id.nullable().optional(),
+  ball_in_court: optionalText(200),
+  asked_by_id: Id.nullable().optional(),
+  date_required: optionalDate,
+});
+export type RfiInput = z.input<typeof RfiInputSchema>;
+export const RfiPatchSchema = RfiInputSchema.partial();
+export type RfiPatch = z.input<typeof RfiPatchSchema>;
+
+export const SubmittalAction = z.enum(["pending", "approved", "approved_as_noted", "revise_resubmit", "rejected"]);
+
+export const SubmittalInputSchema = z.object({
+  title: z.string().trim().min(1, "Give the submittal a title.").max(300),
+  spec_section: optionalText(60),
+  description: optionalText(10000),
+  submitted_by: optionalText(200),
+  reviewer_id: Id.nullable().optional(),
+  reviewer: optionalText(200),
+  received_on: optionalDate,
+  due_on: optionalDate,
+  action: SubmittalAction.optional(),
+  review_notes: optionalText(10000),
+});
+export type SubmittalInput = z.input<typeof SubmittalInputSchema>;
+export const SubmittalPatchSchema = SubmittalInputSchema.partial();
+export type SubmittalPatch = z.input<typeof SubmittalPatchSchema>;
+
+export const MilestoneInputSchema = z.object({
+  name: z.string().trim().min(1, "Name the milestone.").max(120),
+  due_on: isoDate,
+});
+export const MilestonePatchSchema = MilestoneInputSchema.partial().extend({ done: z.boolean().optional() });
+export type MilestonePatch = z.input<typeof MilestonePatchSchema>;
+
+export const ReviewInputSchema = z.object({
+  name: z.string().trim().min(1, "Name the review.").max(200),
+  milestone_id: Id.nullable().optional(),
+  due_on: optionalDate,
+});
+export const ReviewPatchSchema = ReviewInputSchema.partial().extend({ status: z.enum(["open", "closed"]).optional() });
+export type ReviewPatch = z.input<typeof ReviewPatchSchema>;
+
+export const Disposition = z.enum(["pending", "incorporate", "no_change", "rejected", "deferred"]);
+
+export const ViewQuery = z.string().max(2000);
+export const SavedViewInputSchema = z.object({
+  name: z.string().trim().min(1, "Name the view.").max(80),
+  view: z.enum(["table", "board", "calendar", "timeline"]),
+  query: ViewQuery,
+  shared: z.boolean().default(true),
+});
+export type SavedViewInput = z.input<typeof SavedViewInputSchema>;
+
+export const TemplateInputSchema = z.object({
+  name: z.string().trim().min(1, "Name the template.").max(120),
+  description: optionalText(500),
+});

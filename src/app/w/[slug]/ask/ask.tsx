@@ -99,7 +99,7 @@ export default function Ask({ slug, available }: { slug: string; available: bool
                 <li key={s.n} className="flex gap-2">
                   <span className="text-slate-500">[{s.n}]</span>
                   <Link href={path(sourcePath(s))} className="min-w-0 truncate text-orange-300 hover:text-orange-200">
-                    {s.kind === "document" ? "Document" : s.kind === "comment" ? "Comment" : (KIND[s.item_type ?? ""] ?? "Task")}: {s.title}
+                    {s.kind === "document" ? "Document" : s.kind === "rfi" ? "RFI" : s.kind === "submittal" ? "Submittal" : s.kind === "comment" ? "Comment" : (KIND[s.item_type ?? ""] ?? "Task")}: {s.title}
                   </Link>
                   <span className="shrink-0 text-slate-500">· {s.project_name}</span>
                 </li>

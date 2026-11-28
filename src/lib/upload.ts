@@ -9,7 +9,7 @@ import { deleteAttachment, finishUpload, startUpload } from "@/server/files";
 // the three steps). Returns the saved attachment, or an error to show.
 export async function uploadFile(
   file: File,
-  target: { projectId: string; itemId?: string; documentId?: string },
+  target: { projectId: string; itemId?: string; documentId?: string; rfiId?: string; submittalId?: string },
 ): Promise<{ attachment?: Attachment; error?: string }> {
   const problem = uploadProblem(file);
   if (problem) return { error: problem };

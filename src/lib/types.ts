@@ -121,6 +121,8 @@ export type Attachment = {
   workspace_id: string;
   item_id: string | null;
   document_id: string | null;
+  rfi_id?: string | null;
+  submittal_id?: string | null;
   storage_path: string;
   name: string;
   size_bytes: number;
@@ -155,6 +157,12 @@ export type Item = {
   position: number;
   completed_at: string | null;
   created_at: string;
+  /** Phase 5 register links (optional so older fixtures still type-check). */
+  rfi_id?: string | null;
+  submittal_id?: string | null;
+  /** Set for a design review comment, along with its disposition. */
+  review_id?: string | null;
+  disposition?: "pending" | "incorporate" | "no_change" | "rejected" | "deferred" | null;
 };
 
 export type Subtask = {

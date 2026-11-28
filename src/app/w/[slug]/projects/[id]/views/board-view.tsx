@@ -13,7 +13,7 @@ import { groupBySection } from "./table-view";
 type GroupBy = "status" | "section";
 type Column = { key: string; label: string; accent: string; tasks: Task[]; patch: { status?: ItemStatus; section_id?: string | null } };
 
-export default function BoardView({ project, sections, tasks }: { project: Project; sections: Section[]; tasks: Task[] }) {
+export default function BoardView({ project, sections, tasks, sorted = false }: { project: Project; sections: Section[]; tasks: Task[]; sorted?: boolean }) {
   const today = useToday();
   const { update, add } = useTaskStore();
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
@@ -26,10 +26,10 @@ export default function BoardView({ project, sections, tasks }: { project: Proje
           key: s.id,
           label: s.label,
           accent: s.column,
-          tasks: tasks.filter((t) => t.status === s.id).sort(byPosition),
+          tasks: sorted ? tasks.filter((t) => t.status === s.id) : tasks.filter((t) => t.status === s.id).sort(byPosition),
           patch: { status: s.id },
         }))
-      : groupBySection(sections, tasks).map((g) => ({
+      : groupBySection(sections, tasks, sorted).map((g) => ({
           key: g.id ?? "none",
           label: g.name,
           accent: g.color.border,

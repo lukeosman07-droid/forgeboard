@@ -248,6 +248,94 @@ const PROJECTS = [
       { type: "risk", title: "Bypass pumping during cutover isn't budgeted", details: "Need a cost estimate and a temporary pumping plan.", priority: "medium" },
       { type: "question", title: "Does the city require a backup generator for this station class?", assignee: "Maria" },
     ],
+    // Phase 5: registers, milestones, a design review and task dependencies.
+    // The generator question above is left without an RFI, so "Create RFI" shows.
+    engineering: {
+      rfis: [
+        {
+          subject: "Available fault current at the service entrance",
+          question: "Please confirm the available fault current at the utility transformer serving the station. We need it to finish the short-circuit study.",
+          status: "open",
+          ball_in_court: "City Electric Utility",
+          opened: -9,
+          required: 3,
+          task: "Finalize electrical one-line diagram",
+        },
+        {
+          subject: "City PLC standard for SCADA",
+          question: "Which PLC platform and firmware does the city require for new stations?",
+          response: "Use the city's current standard PLC family with the latest approved firmware. Tag naming per the 2024 SCADA standard.",
+          status: "answered",
+          ball_in_court: "Priya",
+          opened: -12,
+          answered: -5,
+          required: -6,
+          task: "Draft SCADA tag list",
+        },
+      ],
+      submittals: [
+        {
+          spec_section: "43 21 13",
+          title: "VFD pump product data",
+          submitted_by: "Atlas Pump Co.",
+          reviewer: "Sam",
+          first: { received: -14, due: -7, returned: -8, action: "revise_resubmit", notes: "Pump curve doesn't show the duty point at minimum speed. Resubmit with the full curve set." },
+          received: -2,
+          due: 5,
+          task: "Issue purchase order for VFD pumps",
+        },
+        {
+          spec_section: "26 24 19",
+          title: "Motor control center shop drawings",
+          submitted_by: "Brightline Electric",
+          reviewer: "Dev",
+          received: -10,
+          due: -3,
+          returned: -4,
+          action: "approved_as_noted",
+          notes: "Add a spare bucket in section 3.",
+        },
+        {
+          spec_section: "03 15 19",
+          title: "Pump pad anchor bolt cut sheets",
+          submitted_by: "Atlas Pump Co.",
+          reviewer: "Jen",
+          received: -8,
+          due: -2,
+        },
+      ],
+      milestones: [
+        { name: "60% design", due: -3, done: true },
+        { name: "90% design", due: 18 },
+        { name: "Construction start", due: 21 },
+        { name: "Station cutover", due: 57 },
+      ],
+      reviews: [
+        {
+          name: "60% design review comments",
+          milestone: "60% design",
+          due: 7,
+          comments: [
+            { title: "Show the bypass pumping connection on the mechanical plan", assignee: "Sam", disposition: "incorporate", due: 6 },
+            { title: "Label the VFD bypass contactors on the one-line", assignee: "Dev", disposition: "incorporate", due: 5, status: "done" },
+            { title: "Consider a second wet well level transmitter", assignee: "Priya", disposition: "pending" },
+            { title: "Move the MCC to the north wall", assignee: "Maria", disposition: "reject", details: "No room for the required clearances." },
+          ],
+        },
+      ],
+      // [predecessor, successor]. The first pair clashes on purpose: the PO
+      // starts before the one-line it depends on is due.
+      dependencies: [
+        ["Request updated pump curves from vendor", "Size the discharge header"],
+        ["Finalize electrical one-line diagram", "Issue purchase order for VFD pumps"],
+        ["Issue purchase order for VFD pumps", "Install new pumps and VFDs"],
+        ["Install new pumps and VFDs", "Station cutover with bypass pumping"],
+        ["SCADA integration and testing", "Station cutover with bypass pumping"],
+      ],
+      views: [
+        { name: "Open high-priority work", view: "table", query: "priority=high,urgent&done=hide&sort=due" },
+      ],
+    },
   },
   {
     name: "Mobile App Launch",
@@ -404,7 +492,151 @@ async function createSampleProject(ownerId, workspaceId, def) {
     if (error) fail("create sample updates", error);
   }
 
+  if (def.engineering) await seedEngineering(project.id, ownerId, itemId, def.engineering);
+
   return inserted.length;
+}
+
+// A missing table means the Phase 5 migration hasn't been run yet: skip, don't fail.
+function phase5Missing(error) {
+  return error && (error.code === "42P01" || error.code === "PGRST205" || /does not exist|schema cache/i.test(error.message ?? ""));
+}
+
+function at(days) {
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
+// RFIs, submittals, milestones, a design review and dependencies (Phase 5).
+// With no auth.uid(), the status timestamps given here are kept as history.
+async function seedEngineering(projectId, ownerId, itemId, eng) {
+  const { data: rfis, error: rfiError } = await supabase
+    .from("rfis")
+    .insert(
+      eng.rfis.map((r) => ({
+        project_id: projectId,
+        created_by: ownerId,
+        asked_by_id: ownerId,
+        subject: r.subject,
+        question: r.question,
+        response: r.response ?? null,
+        status: r.status,
+        ball_in_court: r.ball_in_court,
+        date_required: inDays(r.required),
+        opened_at: at(r.opened),
+        answered_at: r.answered == null ? null : at(r.answered),
+        closed_at: null,
+      })),
+    )
+    .select("id, subject");
+  if (phase5Missing(rfiError)) {
+    console.log("  ! Skipped RFIs, submittals and reviews: run the Phase 5 migration first.");
+    return;
+  }
+  if (rfiError) fail("create sample RFIs", rfiError);
+  const rfiId = new Map(rfis.map((r) => [r.subject, r.id]));
+
+  const { data: subs, error: subError } = await supabase
+    .from("submittals")
+    .insert(
+      eng.submittals.map((s) => ({
+        project_id: projectId,
+        created_by: ownerId,
+        spec_section: s.spec_section,
+        title: s.title,
+        submitted_by: s.submitted_by,
+        reviewer: s.reviewer,
+        received_on: inDays(s.first ? s.first.received : s.received),
+        due_on: inDays(s.first ? s.first.due : s.due),
+        returned_on: s.first ? inDays(s.first.returned) : s.returned == null ? null : inDays(s.returned),
+        action: s.first ? s.first.action : (s.action ?? "pending"),
+        review_notes: s.first ? s.first.notes : (s.notes ?? null),
+      })),
+    )
+    .select("id, title");
+  if (subError) fail("create sample submittals", subError);
+  const subId = new Map(subs.map((s) => [s.title, s.id]));
+  // A resubmitted one: moving to revision 1 files revision 0 in the history.
+  for (const s of eng.submittals.filter((x) => x.first)) {
+    const { error } = await supabase
+      .from("submittals")
+      .update({ revision: 1, received_on: inDays(s.received), due_on: inDays(s.due) })
+      .eq("id", subId.get(s.title));
+    if (error) fail("log a sample submittal revision", error);
+  }
+
+  // Link tasks to their RFI or submittal.
+  const links = [
+    ...eng.rfis.filter((r) => r.task).map((r) => [r.task, { rfi_id: rfiId.get(r.subject) }]),
+    ...eng.submittals.filter((s) => s.task).map((s) => [s.task, { submittal_id: subId.get(s.title) }]),
+  ];
+  for (const [title, patch] of links) {
+    const { error } = await supabase.from("items").update(patch).eq("id", itemId.get(title));
+    if (error) fail("link sample tasks to the registers", error);
+  }
+
+  const { data: milestones, error: msError } = await supabase
+    .from("milestones")
+    .insert(
+      eng.milestones.map((m) => ({
+        project_id: projectId,
+        created_by: ownerId,
+        name: m.name,
+        due_on: inDays(m.due),
+        done_at: m.done ? at(m.due) : null,
+      })),
+    )
+    .select("id, name");
+  if (msError) fail("create sample milestones", msError);
+  const milestoneId = new Map(milestones.map((m) => [m.name, m.id]));
+
+  for (const r of eng.reviews) {
+    const { data: review, error } = await supabase
+      .from("reviews")
+      .insert({ project_id: projectId, created_by: ownerId, name: r.name, milestone_id: milestoneId.get(r.milestone) ?? null, due_on: inDays(r.due) })
+      .select("id")
+      .single();
+    if (error) fail("create the sample design review", error);
+    const { error: commentError } = await supabase.from("items").insert(
+      r.comments.map((c) => ({
+        project_id: projectId,
+        created_by: ownerId,
+        section_id: null,
+        source_document_id: null,
+        review_id: review.id,
+        disposition: c.disposition,
+        type: "action_item",
+        title: c.title,
+        details: c.details ?? null,
+        assignee: c.assignee,
+        status: c.status ?? "open",
+        priority: "medium",
+        start_date: null,
+        due_date: c.due == null ? null : inDays(c.due),
+        position: 0,
+        completed_at: c.status === "done" ? new Date().toISOString() : null,
+      })),
+    );
+    if (commentError) fail("create sample review comments", commentError);
+  }
+
+  const { error: depError } = await supabase.from("item_dependencies").insert(
+    eng.dependencies.map(([pre, suc]) => ({
+      project_id: projectId,
+      created_by: ownerId,
+      predecessor_id: itemId.get(pre),
+      successor_id: itemId.get(suc),
+    })),
+  );
+  if (depError) fail("create sample task dependencies", depError);
+
+  const { error: viewError } = await supabase
+    .from("saved_views")
+    .insert(eng.views.map((v) => ({ project_id: projectId, created_by: ownerId, shared: true, ...v })));
+  if (viewError) fail("create sample saved views", viewError);
+
+  console.log(
+    `  ✓ Added ${rfis.length} RFIs, ${subs.length} submittals, ${milestones.length} milestones, ${eng.reviews.length} review and ${eng.dependencies.length} dependencies`,
+  );
 }
 
 main().catch((error) => fail("seed the demo account", error));

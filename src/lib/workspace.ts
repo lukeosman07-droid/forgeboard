@@ -2,7 +2,7 @@ import "server-only";
 import { withCurrentNames } from "@/lib/people";
 import { createClient } from "@/lib/supabase/server";
 import type { Item, Person, Profile, Project } from "@/lib/types";
-import { TASK_SELECT, toTask } from "@/lib/work";
+import { TASK_SELECT, isPlanTask, toTask } from "@/lib/work";
 
 export type ProjectSummary = Pick<Project, "id" | "name" | "color" | "description" | "created_at">;
 
@@ -31,7 +31,7 @@ export async function loadWorkspaceData(workspaceId: string, userId: string, peo
   return {
     profile: profile.data,
     projects: (projects.data ?? []) as ProjectSummary[],
-    tasks: withCurrentNames(((items.data ?? []) as Item[]).map(toTask), people),
+    tasks: withCurrentNames(((items.data ?? []) as Item[]).filter(isPlanTask).map(toTask), people),
     failed: !!(profile.error || projects.error || items.error),
   };
 }

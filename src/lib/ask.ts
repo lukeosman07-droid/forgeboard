@@ -4,7 +4,7 @@
 // asker can read (the search runs under their own permissions).
 
 export type AskPassage = {
-  kind: "task" | "comment" | "document";
+  kind: "task" | "comment" | "document" | "rfi" | "submittal";
   id: string;
   item_id: string | null;
   project_id: string;
@@ -36,8 +36,18 @@ const KIND_LABEL: Record<string, string> = { action_item: "Task", decision: "Dec
 export function askContext(passages: AskPassage[]): string {
   return passages
     .map((p, i) => {
-      const what = p.kind === "document" ? "Document" : p.kind === "comment" ? `Comment on ${KIND_LABEL[p.item_type ?? ""] ?? "task"}` : (KIND_LABEL[p.item_type ?? ""] ?? "Task");
-      const meta = [`project: ${p.project_name}`, `date: ${p.created_at.slice(0, 10)}`, p.status && p.kind === "task" ? `status: ${p.status}` : ""].filter(Boolean).join(" | ");
+      const what =
+        p.kind === "document"
+          ? "Document"
+          : p.kind === "rfi"
+            ? "RFI"
+            : p.kind === "submittal"
+              ? "Submittal"
+              : p.kind === "comment"
+                ? `Comment on ${KIND_LABEL[p.item_type ?? ""] ?? "task"}`
+                : (KIND_LABEL[p.item_type ?? ""] ?? "Task");
+      const showStatus = p.status && (p.kind === "task" || p.kind === "rfi" || p.kind === "submittal");
+      const meta = [`project: ${p.project_name}`, `date: ${p.created_at.slice(0, 10)}`, showStatus ? `status: ${p.status}` : ""].filter(Boolean).join(" | ");
       return `<source id="S${i + 1}">\n${what}: ${p.title}\n${meta}\n${(p.excerpt ?? "").trim()}\n</source>`;
     })
     .join("\n\n");
@@ -75,8 +85,10 @@ export function resolveCitations(answer: string, passages: AskPassage[]): { answ
   return { answer: cleaned, sources };
 }
 
-/** Where a cited source opens: the task, or the project's AI Notes view. */
+/** Where a cited source opens: the task, the RFI or submittal, or the project's AI Notes view. */
 export function sourcePath(source: Pick<AskSource, "kind" | "item_id" | "project_id" | "id">): string {
+  if (source.kind === "rfi") return `/projects/${source.project_id}?view=rfis&rfi=${source.id}`;
+  if (source.kind === "submittal") return `/projects/${source.project_id}?view=submittals&submittal=${source.id}`;
   if (source.item_id) return `/projects/${source.project_id}?task=${source.item_id}`;
   return `/projects/${source.project_id}?view=notes&doc=${source.id}`;
 }

@@ -18,11 +18,14 @@ export default function ItemRow({
   today,
   editTypes,
   onError,
+  rfi,
 }: {
   item: Item;
   today: string | null;
   editTypes: ItemType[];
   onError: (message: string) => void;
+  /** For a question: turn it into an RFI, or open the RFI it became. */
+  rfi?: { label: string | null; onClick: () => void; pending: boolean };
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -110,6 +113,18 @@ export default function ItemRow({
           )}
         </div>
       </div>
+      {rfi && (
+        <button
+          type="button"
+          onClick={rfi.onClick}
+          disabled={rfi.pending}
+          className={`shrink-0 self-start rounded-md border px-2 py-1 text-xs font-medium disabled:opacity-50 ${
+            rfi.label ? "border-sky-500/40 text-sky-300 hover:bg-sky-500/10" : "border-orange-500/40 text-orange-300 hover:bg-orange-500/10"
+          }`}
+        >
+          {rfi.pending ? "Creating…" : rfi.label ? `Open ${rfi.label}` : "Create RFI"}
+        </button>
+      )}
       <div className="flex shrink-0 items-start gap-1 opacity-100 sm:opacity-0 sm:transition sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
         <button
           type="button"

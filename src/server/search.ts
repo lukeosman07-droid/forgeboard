@@ -10,7 +10,7 @@ import { session, workspaceFor } from "./session";
 // limits a guest to the projects shared with them.
 
 export type SearchMatch = {
-  kind: "task" | "comment" | "document";
+  kind: "task" | "comment" | "document" | "rfi" | "submittal";
   id: string;
   item_id: string | null;
   project_id: string;

@@ -34,15 +34,17 @@ const COLS = "grid-cols-[minmax(18rem,1fr)_10rem_9rem_7.5rem_6.5rem_6.5rem_6.5re
 
 type Group = { id: string | null; name: string; color: (typeof GROUP_COLORS)[number]; tasks: Task[] };
 
-export function groupBySection(sections: Section[], tasks: Task[]): Group[] {
+/** Tasks under their sections, in manual order (or as given, when keepOrder: a sort is on). */
+export function groupBySection(sections: Section[], tasks: Task[], keepOrder = false): Group[] {
+  const order = keepOrder ? () => 0 : byPosition;
   const known = new Set(sections.map((s) => s.id));
   const groups: Group[] = sections.map((s, i) => ({
     id: s.id,
     name: s.name,
     color: GROUP_COLORS[i % GROUP_COLORS.length],
-    tasks: tasks.filter((t) => t.section_id === s.id).sort(byPosition),
+    tasks: tasks.filter((t) => t.section_id === s.id).sort(order),
   }));
-  const loose = tasks.filter((t) => !t.section_id || !known.has(t.section_id)).sort(byPosition);
+  const loose = tasks.filter((t) => !t.section_id || !known.has(t.section_id)).sort(order);
   if (loose.length || sections.length === 0) {
     groups.push({ id: null, name: sections.length ? "No section" : "Tasks", color: { bar: "bg-slate-500", text: "text-slate-400", border: "border-t-slate-500" }, tasks: loose });
   }
@@ -54,16 +56,22 @@ export default function TableView({
   sections,
   tasks,
   filtering,
+  sorted = false,
+  conflicts,
 }: {
   project: Project;
   sections: Section[];
   tasks: Task[];
   filtering: boolean;
+  /** A sort is on: rows keep the given order and can't be dragged. */
+  sorted?: boolean;
+  /** Tasks whose start clashes with a task they wait on. */
+  conflicts?: Set<string>;
 }) {
   const today = useToday();
   const { update } = useTaskStore();
   const [dragId, setDragId] = useState<string | null>(null);
-  const groups = groupBySection(sections, tasks);
+  const groups = groupBySection(sections, tasks, sorted);
 
   const dropBefore = (group: Group, beforeId: string | null) => {
     if (!dragId || dragId === beforeId) return;
@@ -84,6 +92,8 @@ export default function TableView({
           today={today}
           filtering={filtering}
           dragging={dragId !== null}
+          sorted={sorted}
+          conflicts={conflicts}
           onDragStart={setDragId}
           onDropBefore={(beforeId) => dropBefore(group, beforeId)}
         />
@@ -99,6 +109,8 @@ function GroupTable({
   today,
   filtering,
   dragging,
+  sorted,
+  conflicts,
   onDragStart,
   onDropBefore,
 }: {
@@ -107,6 +119,8 @@ function GroupTable({
   today: string | null;
   filtering: boolean;
   dragging: boolean;
+  sorted: boolean;
+  conflicts?: Set<string>;
   onDragStart: (id: string | null) => void;
   onDropBefore: (beforeId: string | null) => void;
 }) {
@@ -139,6 +153,8 @@ function GroupTable({
                 color={group.color.bar}
                 today={today}
                 dragging={dragging}
+                draggable={!sorted}
+                conflict={conflicts?.has(task.id) ?? false}
                 onDragStart={() => onDragStart(task.id)}
                 onDragEnd={() => onDragStart(null)}
                 onDrop={() => onDropBefore(task.id)}
@@ -303,6 +319,8 @@ function TaskRow({
   color,
   today,
   dragging,
+  draggable = true,
+  conflict = false,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -311,6 +329,8 @@ function TaskRow({
   color: string;
   today: string | null;
   dragging: boolean;
+  draggable?: boolean;
+  conflict?: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
@@ -322,7 +342,8 @@ function TaskRow({
 
   return (
     <div
-      draggable={!temp}
+      draggable={!temp && draggable}
+      data-conflict={conflict || undefined}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = "move";
         onDragStart();
@@ -360,6 +381,14 @@ function TaskRow({
           {task.title}
         </button>
         <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-slate-500">
+          {conflict && (
+            <span
+              className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-300"
+              title="Starts before a task it waits on is due"
+            >
+              ⚠ Conflict
+            </span>
+          )}
           {task.comment_count > 0 && (
             <span className="flex items-center gap-0.5" title={`${task.comment_count} updates`}>
               <Icon name="comment" className="h-3.5 w-3.5" />

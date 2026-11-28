@@ -73,7 +73,12 @@ export default function ProjectLive({ projectId }: { projectId: string }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "item_comments", filter: `workspace_id=eq.${workspaceId}` }, (p) => {
         if (p.eventType === "DELETE") schedule([...taskIds.current]);
         else if (ours(p.new as Row)) schedule([(p.new as Row).item_id]);
-      })
+      });
+    // Phase 5: registers, milestones, reviews and dependencies just refresh the page.
+    for (const table of ["rfis", "submittals", "milestones", "reviews", "item_dependencies"]) {
+      channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `project_id=eq.${projectId}` }, () => schedule());
+    }
+    channel
       .on("presence", { event: "sync" }, () => {
         setHere(Object.keys(channel.presenceState()).filter((id) => id !== userId));
       })

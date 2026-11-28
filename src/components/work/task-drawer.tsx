@@ -18,6 +18,7 @@ import Attachments from "./attachments";
 import AssigneePicker from "./assignee-picker";
 import Markdown from "./markdown";
 import MentionInput, { type MentionDraft } from "./mention-input";
+import TaskLinks from "./task-links";
 import { Avatar, DateField, Icon, PriorityPicker, ProgressBar, StatusPicker } from "./ui";
 
 // Right-side panel with everything about one task: fields, description,
@@ -252,6 +253,8 @@ export default function TaskDrawer({
               </fieldset>
 
               {loaded?.source && <SourceNote source={loaded.source} quote={task.source_quote} page={task.source_page} projectId={task.project_id} />}
+
+              <TaskLinks task={task} />
 
               <Attachments projectId={task.project_id} itemId={task.id} files={files} setFiles={setFiles} canEdit={canEdit} />
 

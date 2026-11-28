@@ -22,10 +22,12 @@ const StartUpload = z
     projectId: Id,
     itemId: Id.optional(),
     documentId: Id.optional(),
+    rfiId: Id.optional(),
+    submittalId: Id.optional(),
     name: z.string().trim().min(1).max(255),
     size: z.number().int().positive().max(MAX_UPLOAD_BYTES, "Files can be up to 25 MB."),
   })
-  .refine((v) => !(v.itemId && v.documentId), "Attach the file to one thing at a time.");
+  .refine((v) => [v.itemId, v.documentId, v.rfiId, v.submittalId].filter(Boolean).length <= 1, "Attach the file to one thing at a time.");
 
 export type StartedUpload = { id: string; path: string; mimeType: string };
 
@@ -42,6 +44,8 @@ export async function startUpload(input: z.input<typeof StartUpload>): Promise<A
       project_id: parsed.data.projectId,
       item_id: parsed.data.itemId ?? null,
       document_id: parsed.data.documentId ?? null,
+      rfi_id: parsed.data.rfiId ?? null,
+      submittal_id: parsed.data.submittalId ?? null,
       name: parsed.data.name,
       size_bytes: parsed.data.size,
       mime_type: uploadTypeFor(parsed.data.name),
@@ -94,12 +98,24 @@ export async function deleteAttachment(attachmentId: string): Promise<ActionResu
   return { ok: true };
 }
 
-export async function listAttachments(parent: { itemId?: string; documentId?: string }): Promise<Attachment[]> {
-  const parsed = z.object({ itemId: Id.optional(), documentId: Id.optional() }).safeParse(parent);
-  if (!parsed.success || (!parsed.data.itemId && !parsed.data.documentId)) return [];
+export async function listAttachments(parent: { itemId?: string; documentId?: string; rfiId?: string; submittalId?: string }): Promise<Attachment[]> {
+  const parsed = z
+    .object({ itemId: Id.optional(), documentId: Id.optional(), rfiId: Id.optional(), submittalId: Id.optional() })
+    .safeParse(parent);
+  if (!parsed.success) return [];
+  const { itemId, documentId, rfiId, submittalId } = parsed.data;
+  const [column, value] = itemId
+    ? ["item_id", itemId]
+    : documentId
+      ? ["document_id", documentId]
+      : rfiId
+        ? ["rfi_id", rfiId]
+        : submittalId
+          ? ["submittal_id", submittalId]
+          : [null, null];
+  if (!column || !value) return [];
   const { supabase } = await session();
-  let query = supabase.from("attachments").select("*").eq("status", "ready");
-  query = parsed.data.itemId ? query.eq("item_id", parsed.data.itemId) : query.eq("document_id", parsed.data.documentId!);
+  const query = supabase.from("attachments").select("*").eq("status", "ready").eq(column, value);
   const { data } = await query.order("created_at", { ascending: false });
   return (data ?? []) as Attachment[];
 }

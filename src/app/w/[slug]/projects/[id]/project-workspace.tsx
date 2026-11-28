@@ -1,19 +1,29 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { deleteProject, updateProject } from "@/server/projects";
+import { saveProjectAsTemplate } from "@/server/engineering";
 import { useWorkspace } from "@/components/app/workspace-context";
+import { ProjectExtrasProvider, type ProjectExtras } from "@/components/work/project-extras";
 import ProjectLive from "@/components/work/project-live";
 import TaskStore, { useTaskStore } from "@/components/work/task-store";
 import { Icon, MenuItem, Popover, type IconName } from "@/components/work/ui";
+import { useToday } from "@/lib/dates";
+import { findConflicts } from "@/lib/dependencies";
+import { FILTER_KEYS, applyFilters, filtersToQuery, isFiltering, parseFilters, type Filters } from "@/lib/filters";
+import type { SavedView } from "@/lib/registers";
 import type { Item, ProjectDocument, Project, Section, Task } from "@/lib/types";
 import { COLOR_NAMES, colorOf } from "@/lib/work";
+import FilterBar from "./filter-bar";
 import BoardView from "./views/board-view";
 import CalendarView from "./views/calendar-view";
 import LogView from "./views/log-view";
 import NotesView from "./views/notes-view";
 import OverviewView from "./views/overview-view";
+import ReviewsView from "./views/reviews-view";
+import RfisView from "./views/rfis-view";
 import ShareDialog from "./share-dialog";
+import SubmittalsView from "./views/submittals-view";
 import TableView from "./views/table-view";
 import TimelineView from "./views/timeline-view";
 
@@ -28,13 +38,18 @@ const VIEWS: { id: ViewId; label: string; icon: IconName }[] = [
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "timeline", label: "Timeline", icon: "timeline" },
   { id: "log", label: "Decisions & Risks", icon: "log" },
+  { id: "rfis", label: "RFIs", icon: "comment" },
+  { id: "submittals", label: "Submittals", icon: "file" },
+  { id: "reviews", label: "Milestones & Reviews", icon: "check" },
   { id: "notes", label: "AI Notes", icon: "sparkles" },
 ];
 
+const TASK_VIEWS = ["table", "board", "calendar", "timeline"] as const;
+type TaskViewId = (typeof TASK_VIEWS)[number];
+const isTaskView = (v: ViewId): v is TaskViewId => (TASK_VIEWS as readonly string[]).includes(v);
+
 /** The workspace's AI runs this month. */
 export type Usage = { runsLeft: number; runsLimit: number };
-
-export type Filters = { search: string; owner: string; hideDone: boolean };
 
 export default function ProjectWorkspace(props: {
   project: Project;
@@ -47,11 +62,18 @@ export default function ProjectWorkspace(props: {
   sharedWith: string[];
   initialView: ViewId;
   initialTaskId: string | null;
+  /** Filters and sort from the address bar (?status=open&sort=due, for example). */
+  initialQuery: string;
+  /** ?rfi= or ?submittal= opens one. */
+  initialRegisterId: string | null;
+  extras: ProjectExtras;
 }) {
   return (
-    <TaskStore tasks={props.tasks} initialOpenId={props.initialTaskId}>
-      <Workspace {...props} />
-    </TaskStore>
+    <ProjectExtrasProvider value={props.extras}>
+      <TaskStore tasks={props.tasks} initialOpenId={props.initialTaskId}>
+        <Workspace {...props} />
+      </TaskStore>
+    </ProjectExtrasProvider>
   );
 }
 
@@ -63,38 +85,77 @@ function Workspace({
   usage,
   sharedWith,
   initialView,
+  initialQuery,
+  initialRegisterId,
+  extras,
 }: Parameters<typeof ProjectWorkspace>[0]) {
   const { tasks, add } = useTaskStore();
   const { canEdit } = useWorkspace();
+  const today = useToday();
   const [view, setView] = useState<ViewId>(initialView);
-  const [filters, setFilters] = useState<Filters>({ search: "", owner: "", hideDone: false });
+  const [filters, setFiltersState] = useState<Filters>(() => parseFilters(new URLSearchParams(initialQuery)));
+  const [openRfi, setOpenRfi] = useState<string | null>(initialView === "rfis" ? initialRegisterId : null);
+  const [openSubmittal, setOpenSubmittal] = useState<string | null>(initialView === "submittals" ? initialRegisterId : null);
+  const [rfiSeed, setRfiSeed] = useState<string | null>(null);
+
+  /** Rewrites the address bar: the view, its filters, and an open RFI or submittal. */
+  const syncUrl = useCallback((next: { view: ViewId; filters: Filters; register?: { key: "rfi" | "submittal"; id: string | null } }) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", next.view);
+    for (const key of [...FILTER_KEYS, "task", "doc", "rfi", "submittal"]) url.searchParams.delete(key);
+    if (isTaskView(next.view)) for (const [k, v] of new URLSearchParams(filtersToQuery(next.filters))) url.searchParams.set(k, v);
+    if (next.register?.id) url.searchParams.set(next.register.key, next.register.id);
+    window.history.replaceState(null, "", url);
+  }, []);
 
   const switchView = (id: ViewId) => {
     setView(id);
-    // Keep the view in the address bar so refresh and shared links land on it.
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", id);
-    url.searchParams.delete("task");
-    window.history.replaceState(null, "", url);
+    // Keep the view (and its filters) in the address bar so refresh and shared links land on it.
+    syncUrl({ view: id, filters });
   };
+  const setFilters = (f: Filters) => {
+    setFiltersState(f);
+    syncUrl({ view, filters: f });
+  };
+  const openSaved = (v: SavedView) => {
+    const f = parseFilters(new URLSearchParams(v.query));
+    setFiltersState(f);
+    setView(v.view);
+    syncUrl({ view: v.view, filters: f });
+  };
+  const showRfi = (id: string | null) => {
+    setOpenRfi(id);
+    setView("rfis");
+    syncUrl({ view: "rfis", filters, register: { key: "rfi", id } });
+  };
+  const showSubmittal = (id: string | null) => {
+    setOpenSubmittal(id);
+    syncUrl({ view: "submittals", filters, register: { key: "submittal", id } });
+  };
+  const draftRfi = (passage: string) => {
+    setRfiSeed(passage);
+    setOpenRfi(null);
+    switchView("rfis");
+  };
+  const clearSeed = useCallback(() => setRfiSeed(null), []);
 
   const owners = useMemo(
     () => [...new Set(tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort((a, b) => a.localeCompare(b)),
     [tasks],
   );
 
-  const visible = useMemo(() => {
-    const q = filters.search.trim().toLowerCase();
-    return tasks.filter(
-      (t) =>
-        (!q || t.title.toLowerCase().includes(q) || t.assignee?.toLowerCase().includes(q)) &&
-        (!filters.owner || (filters.owner === "__none" ? !t.assignee : t.assignee === filters.owner)) &&
-        (!filters.hideDone || t.status !== "done"),
-    );
-  }, [tasks, filters]);
+  const visible = useMemo(() => applyFilters(tasks, filters, today), [tasks, filters, today]);
+  const conflicts = useMemo(() => findConflicts(tasks, extras.dependencies), [tasks, extras.dependencies]);
+  const conflictIds = useMemo(() => new Set(conflicts.map((c) => c.successor.id)), [conflicts]);
 
-  const filtering = !!(filters.search || filters.owner || filters.hideDone);
-  const showToolbar = view === "table" || view === "board" || view === "calendar" || view === "timeline";
+  const filtering = isFiltering(filters);
+  const sorted = filters.sort !== "manual";
+  const showToolbar = isTaskView(view);
+  const counts: Partial<Record<ViewId, number>> = {
+    log: logItems.length,
+    rfis: extras.rfis.filter((r) => r.status === "open").length,
+    submittals: extras.submittals.filter((s) => s.action === "pending").length,
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -115,9 +176,7 @@ function Workspace({
             >
               <Icon name={v.icon} />
               {v.label}
-              {v.id === "log" && logItems.length > 0 && (
-                <span className="rounded-full bg-white/5 px-1.5 text-xs text-slate-400">{logItems.length}</span>
-              )}
+              {!!counts[v.id] && <span className="rounded-full bg-white/5 px-1.5 text-xs text-slate-400">{counts[v.id]}</span>}
             </button>
           ))}
         </div>
@@ -126,63 +185,65 @@ function Workspace({
       {showToolbar && (
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && <NewTaskButton onAdd={(title) => add(project.id, { title, section_id: sections[0]?.id ?? null })} />}
-          <label className="relative">
-            <span className="sr-only">Search tasks</span>
-            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-            <input
-              value={filters.search}
-              onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              placeholder="Search tasks"
-              className="w-44 rounded-lg border border-white/10 bg-slate-900/60 py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-slate-500 focus:border-orange-500/60 focus:outline-none sm:w-56"
-            />
-          </label>
-          <select
-            aria-label="Filter by owner"
-            value={filters.owner}
-            onChange={(e) => setFilters((f) => ({ ...f, owner: e.target.value }))}
-            className="rounded-lg border border-white/10 bg-slate-900/60 px-2.5 py-1.5 text-sm text-slate-200 focus:border-orange-500/60 focus:outline-none [color-scheme:dark]"
-          >
-            <option value="">All owners</option>
-            {owners.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-            <option value="__none">Unassigned</option>
-          </select>
-          <button
-            type="button"
-            aria-pressed={filters.hideDone}
-            onClick={() => setFilters((f) => ({ ...f, hideDone: !f.hideDone }))}
-            className={`rounded-lg border px-3 py-1.5 text-sm ${
-              filters.hideDone ? "border-orange-500/50 bg-orange-500/10 text-orange-300" : "border-white/10 text-slate-300 hover:bg-white/5"
-            }`}
-          >
-            Hide done
-          </button>
-          {filtering && (
-            <button
-              type="button"
-              onClick={() => setFilters({ search: "", owner: "", hideDone: false })}
-              className="text-sm text-slate-400 hover:text-white"
-            >
-              Clear · {visible.length} of {tasks.length}
-            </button>
-          )}
+          <FilterBar
+            projectId={project.id}
+            filters={filters}
+            onChange={setFilters}
+            owners={owners}
+            sections={sections}
+            views={extras.views}
+            view={view as TaskViewId}
+            onOpenView={openSaved}
+            shown={visible.length}
+            total={tasks.length}
+          />
         </div>
+      )}
+
+      {showToolbar && conflicts.length > 0 && (
+        <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          ⚠ {conflicts.length === 1 ? "1 task starts" : `${conflicts.length} tasks start`} before a task {conflicts.length === 1 ? "it waits" : "they wait"} on is due:{" "}
+          {conflicts
+            .slice(0, 3)
+            .map((c) => `${c.successor.title} (waits on ${c.predecessor.title})`)
+            .join("; ")}
+          {conflicts.length > 3 && "…"}
+        </p>
       )}
 
       <div role="tabpanel">
         {view === "overview" && (
           <OverviewView project={project} sections={sections} tasks={tasks} logItems={logItems} usage={usage} sharedWith={sharedWith} onOpenView={switchView} />
         )}
-        {view === "table" && <TableView project={project} sections={sections} tasks={visible} filtering={filtering} />}
-        {view === "board" && <BoardView project={project} sections={sections} tasks={visible} />}
+        {view === "table" && <TableView project={project} sections={sections} tasks={visible} filtering={filtering} sorted={sorted} conflicts={conflictIds} />}
+        {view === "board" && <BoardView project={project} sections={sections} tasks={visible} sorted={sorted} />}
         {view === "calendar" && <CalendarView project={project} sections={sections} tasks={visible} />}
-        {view === "timeline" && <TimelineView project={project} sections={sections} tasks={visible} />}
-        {view === "log" && <LogView projectId={project.id} items={logItems} />}
+        {view === "timeline" && <TimelineView project={project} sections={sections} tasks={visible} sorted={sorted} />}
+        {view === "log" && <LogView projectId={project.id} items={logItems} rfis={extras.rfis} registers={extras.registers} onOpenRfi={showRfi} />}
+        {view === "rfis" && (
+          <RfisView
+            projectId={project.id}
+            rfis={extras.rfis}
+            registers={extras.registers}
+            openId={openRfi}
+            onOpen={showRfi}
+            seed={rfiSeed}
+            onSeedUsed={clearSeed}
+          />
+        )}
+        {view === "submittals" && (
+          <SubmittalsView projectId={project.id} submittals={extras.submittals} registers={extras.registers} openId={openSubmittal} onOpen={showSubmittal} />
+        )}
+        {view === "reviews" && <ReviewsView projectId={project.id} milestones={extras.milestones} reviews={extras.reviews} comments={extras.reviewComments} />}
         {view === "notes" && (
-          <NotesView projectId={project.id} usage={usage} notes={notes} items={[...tasks, ...logItems]} onSaved={() => switchView("table")} />
+          <NotesView
+            projectId={project.id}
+            usage={usage}
+            notes={notes}
+            items={[...tasks, ...logItems]}
+            onSaved={() => switchView("table")}
+            onDraftRfi={extras.registers && canEdit ? draftRfi : undefined}
+          />
         )}
       </div>
     </div>
@@ -190,9 +251,10 @@ function Workspace({
 }
 
 function ProjectHeader({ project, taskCount, sharedWith }: { project: Project; taskCount: number; sharedWith: string[] }) {
-  const { slug, canEdit } = useWorkspace();
+  const { slug, canEdit, limits } = useWorkspace();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [name, setName] = useState(project.name);
   const color = colorOf(project.color);
 
@@ -270,6 +332,23 @@ function ProjectHeader({ project, taskCount, sharedWith }: { project: Project; t
           )}
         >
           {(close) => (
+            <>
+            {limits.features.workload && (
+              <MenuItem
+                onClick={() => {
+                  close();
+                  const templateName = prompt("Name the template (its sections and tasks are copied; dates become offsets):", project.name);
+                  if (!templateName?.trim()) return;
+                  startTransition(async () => {
+                    const result = await saveProjectAsTemplate(project.id, { name: templateName.trim(), description: project.description });
+                    setError(result.error);
+                    if (!result.error) setNotice(`Saved "${templateName.trim()}" as a template. Pick it under New project → Template.`);
+                  });
+                }}
+              >
+                <Icon name="file" /> Save as template
+              </MenuItem>
+            )}
             <MenuItem
               danger
               onClick={() => {
@@ -279,12 +358,18 @@ function ProjectHeader({ project, taskCount, sharedWith }: { project: Project; t
             >
               <Icon name="trash" /> {pending ? "Deleting…" : "Delete project"}
             </MenuItem>
+            </>
           )}
         </Popover>}
       </div>
       {error && (
         <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+          {notice}
         </p>
       )}
     </div>

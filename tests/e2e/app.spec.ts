@@ -18,7 +18,7 @@ test("the dashboard lists the demo projects", async ({ page }) => {
 test("a project opens in every view", async ({ page }) => {
   await page.getByRole("link", { name: "Pump Station Retrofit" }).first().click();
   await expect(page.getByRole("tablist", { name: "Project views" })).toBeVisible();
-  for (const view of ["Overview", "Table", "Board", "Calendar", "Timeline", "Decisions & Risks", "AI Notes"]) {
+  for (const view of ["Overview", "Table", "Board", "Calendar", "Timeline", "Decisions & Risks", "RFIs", "Submittals", "Milestones & Reviews", "AI Notes"]) {
     await page.getByRole("tab", { name: view }).click();
     await expect(page.getByRole("tab", { name: view })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("tabpanel")).not.toBeEmpty();

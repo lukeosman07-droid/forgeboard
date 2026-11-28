@@ -14,6 +14,8 @@ export default function Attachments({
   projectId,
   itemId,
   documentId,
+  rfiId,
+  submittalId,
   files,
   setFiles,
   canEdit,
@@ -21,6 +23,8 @@ export default function Attachments({
   projectId: string;
   itemId?: string;
   documentId?: string;
+  rfiId?: string;
+  submittalId?: string;
   files: Attachment[];
   setFiles: (update: (files: Attachment[]) => Attachment[]) => void;
   canEdit: boolean;
@@ -37,7 +41,7 @@ export default function Attachments({
     setUploading(chosen.map((f) => f.name));
     // One at a time, so the quota check sees each file before the next.
     for (const file of chosen) {
-      const result = await uploadFile(file, { projectId, itemId, documentId });
+      const result = await uploadFile(file, { projectId, itemId, documentId, rfiId, submittalId });
       if (result.attachment) setFiles((current) => [result.attachment!, ...current]);
       if (result.error) setErrors((e) => [...e, result.error!]);
       setUploading((u) => u.filter((name) => name !== file.name));

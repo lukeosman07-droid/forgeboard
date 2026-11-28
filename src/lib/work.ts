@@ -142,3 +142,11 @@ export function positionBetween(before?: number, after?: number) {
   if (after === undefined) return before + 1;
   return (before + after) / 2;
 }
+
+/**
+ * A task in the plan: any action item, except a design review comment that
+ * nobody has decided to incorporate yet (those live on the review).
+ */
+export function isPlanTask(item: Pick<Item, "type" | "review_id" | "disposition">) {
+  return item.type === "action_item" && (!item.review_id || item.disposition === "incorporate");
+}
