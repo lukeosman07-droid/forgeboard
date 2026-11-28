@@ -64,6 +64,13 @@ Projects now have RFI and submittal registers, milestones and design reviews, an
 - **Find deviations reads one attached file at a time**, up to 300,000 characters of text, or a scanned PDF up to 20 MB.
 - **The RFI and submittal PDFs** use the built-in Helvetica font, so characters outside Western European text show as "?".
 
+### Deployed (Nov 28, 2026)
+
+1. Saved a copy of every live table (`backups/pre-phase-5-...json`, not committed).
+2. Ran the migration on the live database after checking its SHA-256 against the file CI tested. The 8 new tables exist and all 89 existing items are still there. Then merged `phase-5` into `main`; Vercel deployed.
+3. Checked on the live site: Workload is in the sidebar, the RFIs tab shows the upgrade message on Starter, and a link with `?priority=high,urgent` opens the table already filtered. No errors in the browser console.
+4. CI on `phase-5`: lint, typecheck, 118 unit tests, 126 database tests and 36 browser tests pass. CI caught that raising an RFI took three clicks (questions sit under a second sub-tab), so the RFIs tab now lists open questions with a Create RFI button.
+
 ### Decisions for Luke
 
 - Review comments are tasks with a disposition. Marking one "incorporate" turns it into real work in every task view and in the workload page.
